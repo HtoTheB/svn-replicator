@@ -1,0 +1,19 @@
+[project]
+name = "svn-replicator"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "gitpython>=3.1.45",
+    "pyyaml>=6.0.3",
+    "svn>=1.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "types-pyyaml>=6.0.12.20250915",
+]
+
+[tool.uv.sources]
+svn = { git = "https://github.com/dsoprea/PySvn.git" }

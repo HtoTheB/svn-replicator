@@ -1,0 +1,15 @@
+svn:
+  remoteURI: "" # Add remote URI here!
+  
+  skipRevisions: []
+  trunkFolder: "/trunk/"
+  branchFolder: "/branches/"
+  tagFolder: "/tags/"
+  ignoredFolders: []
+
+git:
+  commitMsgPrefix: true # Add revision number to commit message ("r1234: {text}")
+
+localFiles:
+  svnWorkingDir: ".localWCs/svn"
+  gitWorkingDir: ".localWCs/git"
