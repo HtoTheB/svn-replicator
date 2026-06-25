@@ -8,6 +8,7 @@ dependencies = [
     "gitpython>=3.1.45",
     "pyyaml>=6.0.3",
     "svn>=1.0.1",
+    "tqdm>=4.66.0",
 ]
 
 [dependency-groups]

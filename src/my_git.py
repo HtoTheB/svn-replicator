@@ -1,12 +1,12 @@
+import logging
 from git import Repo
 import shutil
 from git import Repo, GitCommandError
 from helper import *
 from pathlib import Path
 from commitMetadata import *
-defaultGitDir = "./.localWCs/git"
-defaultSvnDir = "./.localWCs/svn"
 
+logger = logging.getLogger(__name__)
 
 def getGitBranchNameFromSvnPath(
         path: str,
@@ -26,8 +26,8 @@ def getGitBranchNameFromSvnPath(
 
 
 def init_separate_git_repo(
-    git_dir: str = defaultGitDir,
-    worktree: str = defaultSvnDir,
+    git_dir: str,
+    worktree: str,
     initial_branch: str = "trunk",
 ) -> Repo:
     """
@@ -52,7 +52,7 @@ def init_separate_git_repo(
         raise ValueError(
             f"SVN-Working-Copy-Verzeichnis existiert nicht: {worktree_path}")
 
-    print(f"[git] Initialising local repo...")
+    logger.debug(f"[git] Initialising local repo...")
     # 1. Zuerst ein bare Repo im git_dir anlegen
     repo = Repo.init(git_dir_path)
 

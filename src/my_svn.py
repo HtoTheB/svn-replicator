@@ -1,3 +1,4 @@
+import logging
 from commitMetadata import CommitMetadata  # Pfad an dein Projekt anpassen
 from pathlib import Path, PurePath
 import shutil
@@ -9,11 +10,11 @@ from helper import *
 import os
 import xml.etree.ElementTree as ET
 from typing import List
-from typing import Set
 from typing import Iterable
 from pathChange import *
 from branchChange import *
 
+logger = logging.getLogger(__name__)
 
 def initSvn(svnRemoteURI: str) -> RemoteClient:
     """
@@ -55,7 +56,7 @@ def cloneRepo(
     if dest_path.exists():
         if not dest_path.is_dir():
             # This is a file, we don't want it
-            print(
+            logger.info(
                 f"[svn] '{dest_path}' is a file. Deleting and recloning...")
             dest_path.unlink()
         else:
@@ -64,25 +65,25 @@ def cloneRepo(
                 localClient = LocalClient(str(dest_path))
                 if localClient.info()["url"] == svnRemoteClient.url:
                     # It's the correct repository, update and return it
-                    print(f"[svn] Found appropriate local repo. Updating...")
+                    logger.info(f"[svn] Found appropriate local repo. Updating...")
                     localClient.cleanup()
                     return localClient
                 else:
                     # It's a repository, but the wrong one
-                    print(
+                    logger.info(
                         f"[svn] '{dest_path}' is a repo with the wrong remote. Deleting and recloning..."
                     )
                     shutil.rmtree(dest_path)
             except SvnException:
                 # It's not a repository
-                print(
+                logger.info(
                     f"[svn] '{dest_path}' is not a working copy. Deleting and recloning..."
                 )
                 shutil.rmtree(dest_path)
 
     # We get here if there wasn't a proper local repo before
     dest_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[svn] Cloning remote...")
+    logger.debug(f"[svn] Cloning remote...")
     svnRemoteClient.checkout(str(dest_path), 1)
     return LocalClient(str(dest_path))
 

@@ -1,3 +1,4 @@
+import logging
 from config_manager import load_config, validate_config
 from processor import process_svn_to_git
 
@@ -7,18 +8,27 @@ def main():
     # Load and merge configuration
     config = load_config()
     
+    # Set up logging based on config
+    log_level = config.get("logging", {}).get("level", "INFO")
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format='[%(levelname)s] %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    
     # Validate configuration
     is_valid, error_msg = validate_config(config)
     if not is_valid:
-        print(f"[ERROR] {error_msg}")
+        logger.error(error_msg)
         return 1
     
     # Process the repository
     try:
         process_svn_to_git(config)
+        logger.info("Processing completed successfully")
         return 0
     except Exception as e:
-        print(f"[ERROR] Processing failed: {e}")
+        logger.error(f"Processing failed: {e}", exc_info=True)
         return 1
 
 if __name__ == "__main__":

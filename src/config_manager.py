@@ -1,13 +1,10 @@
-"""
-Configuration management for SVN-Replicator.
-Handles loading config files, parsing CLI arguments, and merging them intelligently.
-"""
-
+import logging
 import yaml
 import argparse
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+logger = logging.getLogger(__name__)
 
 # Define the configuration structure
 # This makes it easy to add new config options in the future
@@ -75,6 +72,14 @@ CONFIG_SCHEMA = {
             "cli": "--git-working-dir",
             "required": False,
             "default": ".localWCs/git",
+        },
+    },
+    "logging": {
+        "level": {
+            "type": "str",
+            "cli": "--log-level",
+            "required": False,
+            "default": "INFO",
         },
     },
 }
@@ -206,9 +211,9 @@ def merge_cli_into_config(config: Dict[str, Any], cli_args: argparse.Namespace) 
 def print_collisions(collisions: List[Tuple[str, Any, Any]]) -> None:
     """Print warning messages for configuration collisions."""
     if collisions:
-        print("[WARNING] Configuration collisions detected. Command line arguments will be used:")
+        logger.warning("Configuration collisions detected. Command line arguments will be used:")
         for key, old_value, new_value in collisions:
-            print(f"  - {key}: config={old_value!r} -> cli={new_value!r}")
+            logger.warning(f"  - {key}: config={old_value!r} -> cli={new_value!r}")
 
 
 def apply_defaults(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -245,7 +250,7 @@ def load_config() -> Dict[str, Any]:
     if config_file.exists():
         config = load_config_from_file(config_file)
     else:
-        print(f"[WARNING] Config file not found: {config_file}")
+        logger.warning(f"Config file not found: {config_file}")
         config = {}
     
     # Merge CLI args into config (CLI args override file values)

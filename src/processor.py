@@ -1,28 +1,13 @@
-import time
+import logging
 from pathlib import Path, PurePath
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 from my_svn import *
 import helper
 from helper import *
 from my_git import *
 
-
-def progress_line(current, total, start_time):
-    """Generate a progress line for console output."""
-    elapsed = time.time() - start_time
-    if elapsed <= 0:
-        elapsed = 1
-
-    revisions_per_minute = current / elapsed * 60
-    remaining = total - current
-    eta = "unknown"
-    if current > 0:
-        eta_seconds = remaining / current * elapsed
-        mins, sec = divmod(int(eta_seconds), 60)
-        hours, mins = divmod(mins, 60)
-        eta = f"{hours:d}:{mins:02d}:{sec:02d}"
-
-    return (f"Processing revision {current}/{total}... "
-            f"{revisions_per_minute:.1f} revisions/min, ETA {eta}")
+logger = logging.getLogger(__name__)
 
 
 def process_svn_to_git(config):
@@ -40,43 +25,44 @@ def process_svn_to_git(config):
     # Initialize Git repository
     gitRepo = init_separate_git_repo()
 
-    startTime = time.time()
+    # Redirect the output of the logging library to work with the tqdm progress bar
+    with logging_redirect_tqdm():
+        # Iterate through all the revisions with progress bar
+        for i in tqdm(
+            range(1, svnRevisionCount+1), 
+            desc="Processing revisions",
+            unit=" rev",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [ETA: {remaining}, {rate_fmt}]",
+            smoothing=0.02
+            ):
+            # Skip revisions that we are not supposed to look at
+            if i in config["svn"]["skipRevisions"]:
+                continue
 
-    # Iterate through all the revisions
-    for i in range(1, svnRevisionCount):
-        # Skip revisions that we are not supposed to look at
-        if i in config["svn"]["skipRevisions"]:
-            continue
-
-        # Look at all the changed files
-        fileChanges = getChangesInRevision(svnLocalClient, i)
-        # Check whether any of the files match one of the folders that we're supposed to look at
-        branchChanges = findAffectedBranches(
-            fileChanges,
-            PurePath(config["svn"]["trunkFolder"]),
-            PurePath(config["svn"]["branchFolder"]),
-            PurePath(config["svn"]["tagFolder"]),
-            map(PurePath, config["svn"]["ignoredFolders"]),
-        )
-
-        print("\r\x1b[2K" + # Delete last line
-              progress_line(i, svnRevisionCount, startTime), end="", flush=True)
-        
-        if len(branchChanges) >= 2:
-            print(f"[processor] Revision {i} modified multiple branches")
-        if len(branchChanges) >= 1:
-            switchRevision(svnLocalClient, i)
-            # Create a commit for every folder that we need to change
-            for br in branchChanges:
-                if br.type in [BranchChangeType.MODIFIED, BranchChangeType.ADDED]:
-                    # Switch to branch and commit new changes
-                    switch_branch(gitRepo, br.name, True)
-                    commit(gitRepo, getRevisionMetadata(svnLocalClient, i),
-                        Path(svnLocalClient.path).append(br.path))
-                    
-                elif br.type == BranchChangeType.DELETED:
-                    print(f"[processor] Branch {br.name} was deleted in revision {i}")
-                    # TODO: Option to choose between renaming and deleting branches
-                    rename_branch(gitRepo, br.name, f"del/{br.name}@{i}")
-    
-    print()  # Print newline after progress bar
+            # Look at all the changed files
+            fileChanges = getChangesInRevision(svnLocalClient, i)
+            # Check whether any of the files match one of the folders that we're supposed to look at
+            branchChanges = findAffectedBranches(
+                fileChanges,
+                PurePath(config["svn"]["trunkFolder"]),
+                PurePath(config["svn"]["branchFolder"]),
+                PurePath(config["svn"]["tagFolder"]),
+                map(PurePath, config["svn"]["ignoredFolders"]),
+            )
+            
+            if len(branchChanges) >= 2:
+                logger.debug(f"Revision {i} modified multiple branches")
+            if len(branchChanges) >= 1:
+                switchRevision(svnLocalClient, i)
+                # Create a commit for every folder that we need to change
+                for br in branchChanges:
+                    if br.type in [BranchChangeType.MODIFIED, BranchChangeType.ADDED]:
+                        # Switch to branch and commit new changes
+                        switch_branch(gitRepo, br.name, True)
+                        commit(gitRepo, getRevisionMetadata(svnLocalClient, i),
+                            Path(svnLocalClient.path).append(br.path))
+                        
+                    elif br.type == BranchChangeType.DELETED:
+                        logger.debug(f"Branch {br.name} was deleted in revision {i}")
+                        # TODO: Option to choose between renaming and deleting branches
+                        rename_branch(gitRepo, br.name, f"del/{br.name}@{i}")
