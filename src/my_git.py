@@ -42,6 +42,8 @@ def init_separate_git_repo(
     git_dir_path = Path(git_dir).expanduser().resolve()
     worktree_path = Path(worktree).expanduser().resolve()
 
+    # Delete existing git directory if it exists
+    # TODO: Make this configurable
     if git_dir_path.is_dir():
         shutil.rmtree(git_dir_path)
 
