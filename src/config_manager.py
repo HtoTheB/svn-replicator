@@ -59,6 +59,18 @@ CONFIG_SCHEMA = {
             "required": False,
             "default": False,
         },
+        "keepDeletedBranches": {
+            "type": "bool",
+            "cli": "--keep-deleted-branches",
+            "required": False,
+            "default": False,
+        },
+        "keepDeletedTags": {
+            "type": "bool",
+            "cli": "--keep-deleted-tags",
+            "required": False,
+            "default": False,   
+        }
     },
     "localFiles": {
         "svnWorkingDir": {

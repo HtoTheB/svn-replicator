@@ -76,9 +76,13 @@ def process_svn_to_git(config):
                         # The branch was deleted in the SVN repo
                         logger.debug(f"Branch {branchName} was deleted in revision {i}")
                         # TODO: Option to choose between renaming and deleting branches
-                        rename_branch(gitRepo, branchName, f"del/{branchName}@{i}")
+                        if config["git"]["keepDeletedBranches"]:
+                            rename_branch(gitRepo, branchName, f"del/{branchName}@{i}")
+                        else:
+                            delete_branch(gitRepo, branchName)
 
                         if br.isTag:
                             logger.debug(f"Tag {br.name} was deleted in revision {i}")
-                            delete_git_tag(gitRepo, br.name)
+                            if not config["git"]["keepDeletedTags"]:    
+                                delete_git_tag(gitRepo, br.name)
 

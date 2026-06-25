@@ -11,10 +11,8 @@ logging.getLogger("git").setLevel(logging.INFO)
 
 
 def getGitBranchNameFromSvnPath(
-        path: str,
-        trunkLocation: str,
-        branchLocation: str,
-        tagLocation: str):
+    path: str, trunkLocation: str, branchLocation: str, tagLocation: str
+):
     # Normalize path
     path = ensure_slashes(path)
 
@@ -22,9 +20,13 @@ def getGitBranchNameFromSvnPath(
         return "trunk"
     if path.find(branchLocation) >= 0:
         # Get the name of the first folder after the prefix
-        return substrUntilFirstOccurance(path.removeprefix(ensure_slashes(branchLocation)), "/")
+        return substrUntilFirstOccurance(
+            path.removeprefix(ensure_slashes(branchLocation)), "/"
+        )
     if path.find(tagLocation) >= 0:
-        return "tag/"+substrUntilFirstOccurance(path.removeprefix(ensure_slashes(tagLocation)), "/")
+        return "tag/" + substrUntilFirstOccurance(
+            path.removeprefix(ensure_slashes(tagLocation)), "/"
+        )
 
 
 def init_separate_git_repo(
@@ -47,12 +49,16 @@ def init_separate_git_repo(
     # Delete existing git directory if it exists
     # TODO: Make this configurable
     if git_dir_path.is_dir():
+        logger.debug(
+            f"[git] Working directory {git_dir_path} already exists. Deleting..."
+        )
         shutil.rmtree(git_dir_path)
 
     git_dir_path.mkdir(parents=True, exist_ok=True)
     if not worktree_path.is_dir():
         raise ValueError(
-            f"SVN-Working-Copy-Verzeichnis existiert nicht: {worktree_path}")
+            f"SVN-Working-Copy-Verzeichnis existiert nicht: {worktree_path}"
+        )
 
     logger.debug(f"[git] Initialising local repo...")
     # 1. Zuerst ein bare Repo im git_dir anlegen
@@ -73,7 +79,9 @@ def init_separate_git_repo(
     return repo
 
 
-def switch_branch(repo: Repo, branch_name: str, create_if_missing: bool = False) -> None:
+def switch_branch(
+    repo: Repo, branch_name: str, create_if_missing: bool = False
+) -> None:
     ref = f"refs/heads/{branch_name}"
 
     # Fall 1: Repo hat noch keinen Commit -> unborn HEAD
@@ -91,13 +99,16 @@ def switch_branch(repo: Repo, branch_name: str, create_if_missing: bool = False)
 
     # Branch existiert noch nicht
     if not create_if_missing:
-        raise GitCommandError("switch_branch",
-                              f"Branch '{branch_name}' existiert nicht und create_if_missing=False.")
+        raise GitCommandError(
+            "switch_branch",
+            f"Branch '{branch_name}' existiert nicht und create_if_missing=False.",
+        )
 
     # Neuen Branch-Ref am aktuellen HEAD-Commit anlegen
-    if repo.head.is_detached:
-        raise GitCommandError("switch_branch",
-                              "Local Repo is corrupted, HEAD is detached")
+    elif repo.head.is_detached:
+        raise GitCommandError(
+            "switch_branch", "Local Repo is corrupted, HEAD is detached"
+        )
     else:
         # HEAD zeigt bereits auf einen Branch; neuer Branch vom aktuellen Commit
         repo.create_head(branch_name)
@@ -106,7 +117,8 @@ def switch_branch(repo: Repo, branch_name: str, create_if_missing: bool = False)
     repo.git.symbolic_ref("HEAD", ref)
 
 
-def commit(repo: Repo, meta: CommitMetadata, worktreePath: Path, *, setTag: str | None = None) -> Commit:
+def commit(
+    repo: Repo, meta: CommitMetadata, worktreePath: Path) -> Commit:
     """
     Erzeugt einen Commit im gegebenen Repo auf dem aktuellen Branch.
 
@@ -133,8 +145,7 @@ def commit(repo: Repo, meta: CommitMetadata, worktreePath: Path, *, setTag: str 
 
     # 4. Datumsangaben: mindestens commit_date ist vorhanden
     #    author_date: falls None, nehmen wir commit_date
-    author_date_str = CommitMetadata.to_git_date(
-        meta.author_date or meta.commit_date)
+    author_date_str = CommitMetadata.to_git_date(meta.author_date or meta.commit_date)
     commit_date_str = CommitMetadata.to_git_date(meta.commit_date)
 
     # 5. Commit erzeugen
@@ -144,7 +155,7 @@ def commit(repo: Repo, meta: CommitMetadata, worktreePath: Path, *, setTag: str 
         committer=committer,
         author_date=author_date_str,
         commit_date=commit_date_str,
-        skip_hooks=True
+        skip_hooks=True,
     )
 
     return new_commit
@@ -161,11 +172,22 @@ def rename_branch(
     repo.git.branch("-M", old_name, new_name)
 
 
+def delete_branch(
+    repo: Repo,
+    branch_name: str,
+) -> None:
+    """
+    Löscht einen Git-Branch.
+    """
+    repo.git.update_ref("-d", f"refs/heads/{branch_name}")
+
+
 def set_git_tag(repo: Repo, tag_name: str, commit: Commit) -> None:
     """
     Setzt einen Git-Tag auf den angegebenen Commit.
     """
     repo.create_tag(tag_name, commit.hexsha, force=True)
+
 
 def delete_git_tag(repo: Repo, tag_name: str) -> None:
     """
