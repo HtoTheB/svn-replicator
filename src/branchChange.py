@@ -12,7 +12,7 @@ class BranchChangeType(Enum):
 def getBranchInfos(path: PurePath,
                    trunk_root: PurePath,
                    branches_root: PurePath,
-                   tags_root: PurePath,) -> (PurePath, str, bool):
+                   tags_root: PurePath,) -> tuple[PurePath, str, bool]:
     # /trunk oder darunter
         if path.is_relative_to(trunk_root):
             branch_name = "trunk"

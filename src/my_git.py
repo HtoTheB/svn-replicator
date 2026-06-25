@@ -7,6 +7,8 @@ from pathlib import Path
 from commitMetadata import *
 
 logger = logging.getLogger(__name__)
+logging.getLogger("git").setLevel(logging.INFO)
+
 
 def getGitBranchNameFromSvnPath(
         path: str,
@@ -147,8 +149,6 @@ def commit(repo: Repo, meta: CommitMetadata, worktreePath: Path, *, setTag: str 
 
     return new_commit
 
-from git import Repo, GitCommandError
-
 
 def rename_branch(
     repo: Repo,
@@ -157,20 +157,18 @@ def rename_branch(
 ) -> None:
     """
     Bennent einen Git-Branch von old_name nach new_name um.
-
-    - Ändert nur Refs, NICHT den Working Tree.
-    - Wenn das Repo noch keinen Commit hat (unborn HEAD) und HEAD auf old_name zeigt,
-      wird nur HEAD auf new_name umgehängt.
-    - Bei force=True wird '-M' statt '-m' benutzt (überschreibt evtl. existierenden Branch).
-
-    :raises ValueError: wenn der Branch nicht existiert oder umbenennen fehlschlägt.
     """
+    repo.git.branch("-M", old_name, new_name)
 
-    args = ["-M", old_name, new_name]
-    try:
-        # entspricht: git branch -m|-M old_name new_name
-        repo.git.branch(*args)
-    except GitCommandError as e:
-        raise ValueError(
-            f"Branch '{old_name}' konnte nicht in '{new_name}' umbenannt werden: {e}"
-        ) from e
+
+def set_git_tag(repo: Repo, tag_name: str, commit: Commit) -> None:
+    """
+    Setzt einen Git-Tag auf den angegebenen Commit.
+    """
+    repo.create_tag(tag_name, commit.hexsha, force=True)
+
+def delete_git_tag(repo: Repo, tag_name: str) -> None:
+    """
+    Löscht einen Git-Tag.
+    """
+    repo.delete_tag(tag_name)

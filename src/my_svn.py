@@ -15,6 +15,8 @@ from pathChange import *
 from branchChange import *
 
 logger = logging.getLogger(__name__)
+logging.getLogger("svn").setLevel(logging.INFO)
+
 
 def initSvn(svnRemoteURI: str) -> RemoteClient:
     """
@@ -142,7 +144,7 @@ def findAffectedBranches(
             continue
 
         branch_root, branch_name, isTag = branchInfos
-        if str(branch_root) in excluded_branches:
+        if branch_root in excluded_branches:
             continue
 
         # Check if there already is an entry for our branch
