@@ -70,7 +70,31 @@ CONFIG_SCHEMA = {
             "cli": "--keep-deleted-tags",
             "required": False,
             "default": False,   
-        }
+        },
+        "tryReuseExistingRepo": {
+            "type": "bool",
+            "cli": "--reuse-existing-repo",
+            "required": False,
+            "default": False,
+        },
+        "remoteUrl": {
+            "type": "str",
+            "cli": "--git-remote-url",
+            "required": False,
+            "default": "",
+        },
+        "authUsername": {
+            "type": "str",
+            "cli": "--git-auth-username",
+            "required": False,
+            "default": "",
+        },
+        "authToken": {
+            "type": "str",
+            "cli": "--git-auth-token",
+            "required": False,
+            "default": "",
+        },
     },
     "localFiles": {
         "svnWorkingDir": {

@@ -10,6 +10,10 @@ git:
   commitMsgPrefix: true # Add SVN revision number to git commit messages
   keepDeletedBranches: false # Preserve deleted SVN branches in Git history
   keepDeletedTags: false # Preserve deleted SVN tags in Git history
+  tryReuseExistingRepo: false # Reuse an existing Git repository in the working directory
+  remoteUrl: "" # Expected Git remote URL for reuse and update handling
+  authUsername: "" # Username for authenticated Git access
+  authToken: "" # Token for authenticated Git access
 
 localFiles:
   svnWorkingDir: ".localWCs/svn" # Local path to store SVN working copies
