@@ -161,6 +161,19 @@ def commit(
     return new_commit
 
 
+def clear_worktree_config(repo: Repo) -> None:
+    """
+    Entfernt die temporäre core.worktree-Konfiguration aus dem Git-Repo.
+
+    Das setzt das Repository wieder auf sein normales eigenes Working-Tree-Verhalten zurück.
+    """
+    try:
+        repo.git.config("--unset", "core.worktree")
+    except GitCommandError:
+        # core.worktree kann in manchen Läufen bereits nicht mehr gesetzt sein.
+        pass
+
+
 def rename_branch(
     repo: Repo,
     old_name: str,

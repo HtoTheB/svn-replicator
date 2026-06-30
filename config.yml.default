@@ -1,15 +1,19 @@
 svn:
-  remoteURI: "" # Add remote URI here!
-  
-  skipRevisions: []
-  trunkFolder: "/trunk/"
-  branchFolder: "/branches/"
-  tagFolder: "/tags/"
-  ignoredFolders: []
+  remoteURI: "" # SVN repository URI (required)
+  skipRevisions: [] # List of SVN revisions to skip during mirror creation
+  trunkFolder: "/trunk/" # Path prefix for the SVN trunk folder
+  branchFolder: "/branches/" # Path prefix for the SVN branches folder
+  tagFolder: "/tags/" # Path prefix for the SVN tags folder
+  ignoredFolders: [] # List of SVN folders to ignore when processing
 
 git:
-  commitMsgPrefix: true # Add revision number to commit message ("r1234: {text}")
+  commitMsgPrefix: true # Add SVN revision number to git commit messages
+  keepDeletedBranches: false # Preserve deleted SVN branches in Git history
+  keepDeletedTags: false # Preserve deleted SVN tags in Git history
 
 localFiles:
-  svnWorkingDir: ".localWCs/svn"
-  gitWorkingDir: ".localWCs/git"
+  svnWorkingDir: ".localWCs/svn" # Local path to store SVN working copies
+  gitWorkingDir: ".localWCs/git" # Local path to store Git working copy
+
+logging:
+  level: "INFO" # Logging verbosity level (DEBUG, INFO, WARNING, ERROR)
