@@ -1,5 +1,5 @@
 import logging
-from commitMetadata import CommitMetadata  # Pfad an dein Projekt anpassen
+from commitMetadata import CommitMetadata  # Adjust path to your project
 from pathlib import Path, PurePath
 import shutil
 from svn.local import LocalClient
@@ -20,13 +20,13 @@ logging.getLogger("svn").setLevel(logging.INFO)
 
 def initSvn(svnRemoteURI: str) -> RemoteClient:
     """
-    Erzeugt einen RemoteClient für ein SVN-Repository.
+    Creates a RemoteClient for an SVN repository.
 
-    - Wenn repoPath eine URL ist -> RemoteClient(repoPath)
-    - Wenn repoPath ein lokaler Pfad ist -> file://-URL aus dem Pfad
+    - If repoPath is a URL -> RemoteClient(repoPath)
+    - If repoPath is a local path -> file:// URL from the path
 
-    Working Copies werden NICHT akzeptiert.
-    Wenn verify=True, wird ein einfacher 'svn log'-Check gemacht.
+    Working copies are NOT accepted.
+    If verify=True, a simple 'svn log' check is performed.
     """
     # Setting this environment variable fixes issues with a missing locale
     os.environ["LC_ALL"] = "C"
@@ -36,7 +36,7 @@ def initSvn(svnRemoteURI: str) -> RemoteClient:
         client.info()
     except SvnException as exc:
         raise ValueError(
-            f"'Unter {svnRemoteURI}' ist kein erreichbares SVN-Repository."
+            f"'{svnRemoteURI}' is not an accessible SVN repository."
         ) from exc
 
     return client
@@ -46,11 +46,11 @@ def cloneRepo(
     svnRemoteClient: RemoteClient, dest: str
 ) -> LocalClient:
     """
-    Stellt eine lokale Working Copy in 'dest' bereit:
+    Provides a local working copy in 'dest':
 
-    :param client: RemoteClient (von initSvn), LocalClient wird aber auch toleriert.
-    :param dest: Zielordner für die Working Copy
-    :return: LocalClient für die Working Copy in dest
+    :param client: RemoteClient (from initSvn), LocalClient is also tolerated.
+    :param dest: Target folder for the working copy
+    :return: LocalClient for the working copy in dest
     """
     dest_path = Path(dest).expanduser().resolve()
 
@@ -97,9 +97,9 @@ def getRevisionCount(svnLocalClient: LocalClient) -> int:
 
 def getChangesInRevision(svnLocalClient: LocalClient, revision: int) -> List[PathChange]:
     """
-    Liefert alle Änderungen in einer Revision, inkl. SVN-Action ('A','M','D','R')
-    und Node-Kind ('file','dir').
-    Entspricht: svn log -v --xml -r <revision> <Pfad>
+    Returns all changes in a revision, including SVN-Action ('A','M','D','R')
+    and node kind ('file','dir').
+    Equivalent to: svn log -v --xml -r <revision> <path>
     """
     xml_output = svnLocalClient.run_command(
         "log",
@@ -149,11 +149,11 @@ def findAffectedBranches(
 
         # Check if there already is an entry for our branch
         current = next((x for x in result if x.path == branch_root), None)
-        # Check the selected change is the root directory of a branch
+        # Check if the selected change is the root directory of a branch
         is_root_dir = (
             change.kind == SvnNodeKind.DIR and change.path == branch_root)
 
-        # 1) Branch gelöscht (Delete des Root-Verzeichnisses)
+        # 1) Branch deleted (delete of root directory)
         if change.action == SvnAction.DELETE and is_root_dir:
             if current is None:
                 result.append(BranchChange(path=branch_root,
@@ -164,7 +164,7 @@ def findAffectedBranches(
                 raise Exception("Change in Folder while parent deleted!")
                 # current.type = BranchChangeType.DELETED
 
-        # 2) Branch neu angelegt (Add des Root-Verzeichnisses)
+        # 2) Branch newly created (add of root directory)
         elif change.action == SvnAction.ADD and is_root_dir:
             if current is None:
                 result.append(BranchChange(path=branch_root,
@@ -172,7 +172,7 @@ def findAffectedBranches(
                                            type=BranchChangeType.ADDED,
                                            isTag=isTag))
 
-        # 3) Sonstige Änderungen irgendwo unterhalb des Branches -> mindestens MODIFIED
+        # 3) Other changes somewhere below the branch -> at least MODIFIED
         elif current is None:
             result.append(BranchChange(path=branch_root,
                                        name=branch_name,
@@ -180,36 +180,36 @@ def findAffectedBranches(
                                        isTag=isTag))
         elif current is not None:
             current.type = BranchChangeType.MODIFIED
-        # Wenn schon ADDED/DELETED gesetzt ist, unverändert lassen
+        # If ADDED/DELETED is already set, leave unchanged
 
     return result
 
-
+# TODO: This seems to work, but why are we not using the revision parameter?
 def getRevisionMetadata(svnLocalClient: LocalClient, revision: int) -> CommitMetadata:
-    # --- Teil 1: Basisdaten aus svn info() ---
+    # --- Part 1: Basic data from svn info() ---
     info = svnLocalClient.info()
+    
+    # Adjust these keys to match your info() structure if needed
+    rev = int(info["commit#revision"])  # or "commit_revision"
 
-    # Passe diese Keys ggf. an deine info()-Struktur an
-    rev = int(info["commit#revision"])  # oder "commit_revision"
-
-    # --- Teil 2: Metadaten aus svn log() für genau diese Revision ---
+    # --- Part 2: Metadata from svn log() for this exact revision ---
     entries = svnLocalClient.log_default(
         revision_from=rev,
         revision_to=rev,
-        changelist=False,  # nur Metadaten, keine Pfadliste
+        changelist=False,  # metadata only, no path list
     )
-    # wenn keine Logs vorhanden sind, darf das ruhig crashen
+    # If no logs are available, it's okay to crash
     entry = next(entries)
 
-    # Passe diese Feldnamen ggf. an deine LogEntry-Definition an
+    # Adjust these field names to match your LogEntry definition if needed
     message = f"r{rev}: {entry.msg or ''}"
     author = entry.author
-    date = entry.date  # ist bereits ein datetime-Objekt
+    date = entry.date  # is already a datetime object
 
-    # E-Mail: hier Platzhalter, später kannst du ein Mapping von SVN-User -> E-Mail einbauen
+    # E-Mail: placeholder here, you can add SVN user -> email mapping later
     author_email = f"{author}@example.invalid"
 
-    # Wenn du die SVN-Revision/URL im Git-Commit-Text haben willst, kannst du das hier einbauen:
+    # If you want the SVN revision/URL in the Git commit text, you can add it here:
     # message = f"r{rev} {message}"
 
     meta = CommitMetadata(
@@ -220,7 +220,7 @@ def getRevisionMetadata(svnLocalClient: LocalClient, revision: int) -> CommitMet
         committer_email=author_email,
         author_date=date,
         commit_date=date,
-        # parent_commits setzt du später im Git-Teil
+        # You set parent_commits later in the Git part
     )
 
     return meta
@@ -228,10 +228,10 @@ def getRevisionMetadata(svnLocalClient: LocalClient, revision: int) -> CommitMet
 
 def switchRevision(svnLocalClient: LocalClient, revision: int | str) -> None:
     """
-    Bringt die Working Copy auf die angegebene Revision.
+    Updates the working copy to the specified revision.
 
-    :param svnLocalClient: LocalClient für deine SVN-Working-Copy
-    :param revision: Revisionsnummer (z.B. 42) oder 'HEAD'
+    :param svnLocalClient: LocalClient for your SVN working copy
+    :param revision: Revision number (e.g. 42) or 'HEAD'
     """
-    # int -> str konvertieren, damit sowohl 42 als auch '42'/'HEAD' gehen
+    # Convert int -> str so both 42 and '42'/'HEAD' work
     svnLocalClient.update(revision=str(revision))

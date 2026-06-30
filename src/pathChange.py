@@ -21,7 +21,7 @@ class SvnAction(Enum):
         return cls.UNKNOWN
 
     def __str__(self) -> str:
-        return self.value  # für hübsche Ausgabe
+        return self.value  # for nice output
 
 
 class SvnNodeKind(Enum):
@@ -37,7 +37,7 @@ class SvnNodeKind(Enum):
             return cls.UNKNOWN
 
     def __str__(self) -> str:
-        return self.value  # für hübsche Ausgabe
+        return self.value  # for nice output
 
 
 @dataclass

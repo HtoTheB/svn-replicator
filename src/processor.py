@@ -22,18 +22,18 @@ def process_svn_to_git(config):
     svnLocalClient = cloneRepo(svnRemoteClient, config["localFiles"]["svnWorkingDir"])
     svnRevisionCount = getRevisionCount(svnLocalClient)
 
-    # Initialize Git repository
-    gitRepo = init_separate_git_repo(
-        config["localFiles"]["gitWorkingDir"], 
-        config["localFiles"]["svnWorkingDir"]
-    )
+    # Before the actual mirror run, we check if an existing Git repo
+    # can be reused or if we need to resume from a later SVN revision.
+    gitRepo, resumeRevision = prepare_git_repo(svnLocalClient, config)
 
     try:
         # Redirect the output of the logging library to work with the tqdm progress bar
         with logging_redirect_tqdm():
+            # The first missing revision is our starting point; everything before is
+            # considered validated or deliberately skipped.
             # Iterate through all the revisions with progress bar
             for i in tqdm(
-                range(1, svnRevisionCount + 1),
+                range(resumeRevision, svnRevisionCount + 1),
                 desc="Processing revisions",
                 unit=" rev",
                 bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [ETA: {remaining}, {rate_fmt}]",
@@ -61,7 +61,10 @@ def process_svn_to_git(config):
                     # Create a commit for every folder that we need to change
                     for br in branchChanges:
                         branchName = "tag/" + br.name if br.isTag else br.name
-                        if br.type in [BranchChangeType.MODIFIED, BranchChangeType.ADDED]:
+                        if br.type in [
+                            BranchChangeType.MODIFIED,
+                            BranchChangeType.ADDED,
+                        ]:
                             # Switch to branch and commit new changes
                             switch_branch(gitRepo, branchName, True)
                             new_commit = commit(
@@ -70,22 +73,29 @@ def process_svn_to_git(config):
                                 Path(svnLocalClient.path).append(br.path),
                             )
                             if br.isTag:
-                                logger.debug(f"Tag {br.name} was created/modified in revision {i}")
+                                logger.debug(
+                                    f"Tag {br.name} was created/modified in revision {i}"
+                                )
                                 set_git_tag(gitRepo, br.name, new_commit)
 
                         elif br.type == BranchChangeType.DELETED:
                             # The branch was deleted in the SVN repo
-                            logger.debug(f"Branch {branchName} was deleted in revision {i}")
+                            logger.debug(
+                                f"Branch {branchName} was deleted in revision {i}"
+                            )
                             # TODO: Option to choose between renaming and deleting branches
                             if config["git"]["keepDeletedBranches"]:
-                                rename_branch(gitRepo, branchName, f"del/{branchName}@{i}")
+                                rename_branch(
+                                    gitRepo, branchName, f"del/{branchName}@{i}"
+                                )
                             else:
                                 delete_branch(gitRepo, branchName)
 
                             if br.isTag:
-                                logger.debug(f"Tag {br.name} was deleted in revision {i}")
-                                if not config["git"]["keepDeletedTags"]:    
+                                logger.debug(
+                                    f"Tag {br.name} was deleted in revision {i}"
+                                )
+                                if not config["git"]["keepDeletedTags"]:
                                     delete_git_tag(gitRepo, br.name)
     finally:
         clear_worktree_config(gitRepo)
-
