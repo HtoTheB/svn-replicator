@@ -29,22 +29,20 @@ def getGitBranchNameFromSvnPath(
         )
 
 
-def init_separate_git_repo(
+def create_new_git_repo(
     git_dir: str,
-    worktree: str,
     initial_branch: str = "trunk",
 ) -> Repo:
     """
-    Initialisiert ein Git-Repository, dessen .git-Verzeichnis in 'git_dir'
-    liegt, dessen Working-Tree aber 'worktree' ist (dein SVN-Ordner).
+    Initializes a Git repository whose .git directory is located in 'git_dir',
+    but whose working tree is elsewhere (your SVN folder).
 
-    - git_dir: z.B. ".localWCs/git"
-    - worktree: z.B. ".localWCs/svn"
-    - HEAD zeigt auf 'initial_branch' (unborn, bis der erste Commit kommt)
-    - .svn/ wird in diesem Repo ignoriert
+    - git_dir: e.g. ".localWCs/git"
+    - worktree: e.g. ".localWCs/svn"
+    - HEAD points to 'initial_branch' (unborn until the first commit comes)
+    - .svn/ is ignored in this repository
     """
     git_dir_path = Path(git_dir).expanduser().resolve()
-    worktree_path = Path(worktree).expanduser().resolve()
 
     # Delete existing git directory if it exists
     # TODO: Make this configurable
@@ -53,25 +51,18 @@ def init_separate_git_repo(
             f"[git] Working directory {git_dir_path} already exists. Deleting..."
         )
         shutil.rmtree(git_dir_path)
-
+    logger.debug("[git] Initialising new local repo...")
     git_dir_path.mkdir(parents=True, exist_ok=True)
-    if not worktree_path.is_dir():
-        raise ValueError(
-            f"SVN-Working-Copy-Verzeichnis existiert nicht: {worktree_path}"
-        )
-
-    logger.debug(f"[git] Initialising local repo...")
-    # 1. Zuerst ein bare Repo im git_dir anlegen
     repo = Repo.init(git_dir_path)
 
-    # 3. Unborn HEAD auf gewünschten Branch setzen
+    # Force the HEAD of the branch to the initial branch, eventhough
+    # there are no commits yet
     ref = f"refs/heads/{initial_branch}"
     repo.git.symbolic_ref("HEAD", ref)
 
-    # TODO: template für ein gitignore im Zielverzeichnis anlegen
-    # 4. .svn für dieses Repo ignorieren (ohne .gitignore im SVN-Baum)
+    # Add .svn/ to the exclude file, to prevent git from tracking the
+    # svn folder, without having to mess with the files in the working tree
     exclude_path = Path(repo.git_dir) / "info" / "exclude"
-
     exclude_path.parent.mkdir(parents=True, exist_ok=True)
     with exclude_path.open("a", encoding="utf-8") as f:
         f.write("\n.svn/\n")
@@ -84,71 +75,75 @@ def switch_branch(
 ) -> None:
     ref = f"refs/heads/{branch_name}"
 
-    # Fall 1: Repo hat noch keinen Commit -> unborn HEAD
+    # Case 1: Repo has no commits yet -> unborn HEAD
     if not repo.head.is_valid():
-        # Einfach nur HEAD-Symbolik setzen, kein Branch-Commit existiert bisher
+        # Just set HEAD symbolism, no branch commit exists yet
         repo.git.symbolic_ref("HEAD", ref)
         return
 
-    # Fall 2: Repo hat bereits Commits
-    # Gibt es den Branch bereits?
+    # Case 2: Repo already has commits
+    # Does the branch already exist?
     if branch_name in {h.name: h for h in repo.heads}:
-        # Branch existiert -> HEAD einfach auf diesen Branch zeigen lassen
+        # Branch exists -> just point HEAD to this branch
         repo.git.symbolic_ref("HEAD", ref)
         return
 
-    # Branch existiert noch nicht
+    # Branch does not exist yet
     if not create_if_missing:
         raise GitCommandError(
             "switch_branch",
-            f"Branch '{branch_name}' existiert nicht und create_if_missing=False.",
+            f"Branch '{branch_name}' does not exist and create_if_missing=False.",
         )
 
-    # Neuen Branch-Ref am aktuellen HEAD-Commit anlegen
+    # Create new branch ref at current HEAD commit
     elif repo.head.is_detached:
         raise GitCommandError(
             "switch_branch", "Local Repo is corrupted, HEAD is detached"
         )
     else:
-        # HEAD zeigt bereits auf einen Branch; neuer Branch vom aktuellen Commit
+        # HEAD already points to a branch; create new branch from current commit
         repo.create_head(branch_name)
 
-    # HEAD auf den neuen Branch setzen
+    # Set HEAD to the new branch
     repo.git.symbolic_ref("HEAD", ref)
 
 
-def commit(
-    repo: Repo, meta: CommitMetadata, worktreePath: Path) -> Commit:
+def commit(repo: Repo, meta: CommitMetadata, worktreePath: Path) -> Commit:
     """
-    Erzeugt einen Commit im gegebenen Repo auf dem aktuellen Branch.
+    Creates a commit in the given repository on the current branch.
 
-    - 'worktree' ist das Verzeichnis, dessen Inhalt in den Commit soll
-      (z.B. eine SVN-Working-Copy eines bestimmten Branches).
-    - Es wird nichts am Worktree verändert; Git liest nur Dateien.
+    - 'worktree' is the directory whose contents should be in the commit
+      (e.g., an SVN working copy of a specific branch).
+    - Nothing is modified in the worktree; Git only reads files.
     """
     if not worktreePath.is_dir():
-        raise ValueError(f"Worktree existiert nicht: {worktreePath}")
+        raise ValueError(f"Worktree does not exist: {worktreePath}")
 
-    # 1. Diesen Worktree in der Config eintragen
-    #    (schreibt NUR in .git/config, verändert keine Dateien im Worktree)
+    # 1. Register this worktree in the config
+    #    (writes ONLY to .git/config, does not modify files in the worktree)
     repo.git.config("core.worktree", str(worktreePath))
 
-    # 2. Alle Änderungen aus diesem Worktree stagen (respektiert .git/info/exclude -> .svn)
+    # 2. Stage all changes from this worktree (respects .git/info/exclude -> .svn)
     repo.git.add(A=True)
 
-    # 3. Autor / Committer
+    # 3. Author / Committer
     author = Actor(meta.author_name, meta.author_email)
 
     committer_name = meta.committer_name or meta.author_name
     committer_email = meta.committer_email or meta.author_email
     committer = Actor(committer_name, committer_email)
 
-    # 4. Datumsangaben: mindestens commit_date ist vorhanden
-    #    author_date: falls None, nehmen wir commit_date
-    author_date_str = CommitMetadata.to_git_date(meta.author_date or meta.commit_date)
-    commit_date_str = CommitMetadata.to_git_date(meta.commit_date)
+    # 4. Date information: at least commit_date is available
+    #    author_date: if None, we use commit_date
+    author_date = meta.author_date or meta.commit_date
+    commit_date = meta.commit_date or meta.author_date
+    if author_date is None or commit_date is None:
+        raise ValueError("Commit metadata must contain at least one timestamp")
 
-    # 5. Commit erzeugen
+    author_date_str = CommitMetadata.to_git_date(author_date)
+    commit_date_str = CommitMetadata.to_git_date(commit_date)
+
+    # 5. Create commit
     new_commit = repo.index.commit(
         meta.message,
         author=author,
@@ -163,14 +158,13 @@ def commit(
 
 def clear_worktree_config(repo: Repo) -> None:
     """
-    Entfernt die temporäre core.worktree-Konfiguration aus dem Git-Repo.
-
-    Das setzt das Repository wieder auf sein normales eigenes Working-Tree-Verhalten zurück.
+    Removes the temporary core.worktree configuration from the Git repository.
+    This resets the repository back to its normal working-tree behavior.
     """
     try:
         repo.git.config("--unset", "core.worktree")
     except GitCommandError:
-        # core.worktree kann in manchen Läufen bereits nicht mehr gesetzt sein.
+        # core.worktree may not be set in some runs anymore.
         pass
 
 
@@ -180,7 +174,7 @@ def rename_branch(
     new_name: str,
 ) -> None:
     """
-    Bennent einen Git-Branch von old_name nach new_name um.
+    Renames a Git branch from old_name to new_name.
     """
     repo.git.branch("-M", old_name, new_name)
 
@@ -190,20 +184,22 @@ def delete_branch(
     branch_name: str,
 ) -> None:
     """
-    Löscht einen Git-Branch.
+    Deletes a Git branch.
     """
     repo.git.update_ref("-d", f"refs/heads/{branch_name}")
 
 
 def set_git_tag(repo: Repo, tag_name: str, commit: Commit) -> None:
     """
-    Setzt einen Git-Tag auf den angegebenen Commit.
+    Sets a Git tag on the specified commit.
     """
     repo.create_tag(tag_name, commit.hexsha, force=True)
 
 
 def delete_git_tag(repo: Repo, tag_name: str) -> None:
     """
-    Löscht einen Git-Tag.
+    Deletes a Git tag.
     """
-    repo.delete_tag(tag_name)
+    tag_ref = next((tag for tag in repo.tags if tag.name == tag_name), None)
+    if tag_ref is not None:
+        repo.delete_tag(tag_ref)

@@ -13,7 +13,7 @@ def getBranchInfos(path: PurePath,
                    trunk_root: PurePath,
                    branches_root: PurePath,
                    tags_root: PurePath,) -> tuple[PurePath, str, bool]:
-    # /trunk oder darunter
+    # /trunk or below
         if path.is_relative_to(trunk_root):
             branch_name = "trunk"
             branch_root = trunk_root
