@@ -123,7 +123,7 @@ def getChangesInRevision(svnLocalClient: LocalClient, revision: int) -> List[Pat
 
 
 def findAffectedBranches(
-    changes: Iterable[PathChange],
+    fileChanges: Iterable[PathChange],
     trunk_root: PurePath,
     branches_root: PurePath,
     tags_root: PurePath,
@@ -132,7 +132,7 @@ def findAffectedBranches(
 
     result: List[BranchChange] = []
 
-    for change in changes:
+    for change in fileChanges:
         branch_root: PurePath | None = None
 
         branchInfos = getBranchInfos(change.path,
@@ -178,7 +178,7 @@ def findAffectedBranches(
                                        name=branch_name,
                                        type=BranchChangeType.MODIFIED,
                                        isTag=isTag))
-        elif current is not None:
+        else:
             current.type = BranchChangeType.MODIFIED
         # If ADDED/DELETED is already set, leave unchanged
 

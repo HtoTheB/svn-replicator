@@ -1,6 +1,8 @@
 import logging
 import shutil
 from pathlib import Path, PurePath
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from git import Actor, Repo, GitCommandError
 from git.exc import InvalidGitRepositoryError
@@ -40,41 +42,13 @@ def _revision_matches_git_state(
         # the affected branch or tag.
         branch_name = f"tag/{branch_change.name}" if branch_change.isTag else branch_change.name
 
-        if branch_change.type in (BranchChangeType.ADDED, BranchChangeType.MODIFIED):
-            marker = f"^r{revision}:"
-            try:
-                has_branch_commit = next(
-                    repo.iter_commits(branch_name, grep=marker), None
-                ) is not None
-            except (GitCommandError, ValueError, StopIteration):
-                has_branch_commit = False
-
-            if not has_branch_commit:
-                return False
-
-            if branch_change.isTag:
-                tag_ref = next((tag for tag in repo.tags if tag.name == branch_change.name), None)
-                if tag_ref is None or not str(tag_ref.commit.message).startswith(f"r{revision}:"):
-                    return False
-
-        elif branch_change.type == BranchChangeType.DELETED:
-            deleted_branch_name = f"del/{branch_name}@{revision}"
-            branch_exists = any(head.name == branch_name for head in repo.heads)
-            deleted_branch_exists = any(head.name == deleted_branch_name for head in repo.heads)
-
-            if config["git"]["keepDeletedBranches"]:
-                if not deleted_branch_exists:
-                    return False
-            elif branch_exists:
-                return False
-
-            if branch_change.isTag:
-                tag_exists = any(tag.name == branch_change.name for tag in repo.tags)
-                if config["git"]["keepDeletedTags"]:
-                    if not tag_exists:
-                        return False
-                elif tag_exists:
-                    return False
+        marker = f"^r{revision}:"
+        try:
+            if any(repo.iter_commits(branch_name, grep=marker)):
+                continue
+        except (GitCommandError, ValueError, StopIteration):
+            logger.warning(f"[git] Could not match existing repo against SVN upstream. Missing commit for branch '{branch_name}' in revision r{revision}")
+            return False
 
     return True
 
@@ -95,13 +69,21 @@ def verify_git_repo_against_svn(
     svnRevisionCount = getRevisionCount(svnLocalClient)
     resume_revision = svnRevisionCount + 1
 
-    for revision in range(1, svnRevisionCount + 1):
-        if revision in config["svn"]["skipRevisions"]:
-            continue
+    # Use a progress bar to show verification progress (compatible with logging)
+    with logging_redirect_tqdm():
+        for revision in tqdm(
+            range(1, svnRevisionCount + 1),
+            desc="Verifying revisions",
+            unit=" rev",
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [ETA: {remaining}, {rate_fmt}]",
+            smoothing=0.02,
+        ):
+            if revision in config["svn"]["skipRevisions"]:
+                continue
 
-        if not _revision_matches_git_state(repo, svnLocalClient, revision, config):
-            resume_revision = -1
-            break
+            if not _revision_matches_git_state(repo, svnLocalClient, revision, config):
+                resume_revision = -1
+                break
 
     return resume_revision
 
@@ -121,7 +103,9 @@ def prepare_git_repo(
     try_reuse_existing_repo = config["git"].get("tryReuseExistingRepo", False)
 
     if try_reuse_existing_repo:
+        logger.debug(f"[git] Attempting to reuse existing Git repo at {git_dir_path}")
         if remote_url:
+            logger.debug("[git] Remote URL is set, recloning...")
             # If a remote URL is given, we reclone to prevent issues
             if git_dir_path.exists():
                 shutil.rmtree(git_dir_path)
@@ -131,14 +115,16 @@ def prepare_git_repo(
         
         try:
             # Check if the existing repository is matching the SVN history
+            logger.debug("[git] Verifying existing repo against SVN history...")
             repo = Repo(git_dir_path)
             resume_revision = verify_git_repo_against_svn(repo, svnLocalClient, config)
             if resume_revision >= 1:
+                logger.debug(f"[git] Existing repo matches SVN up to revision {resume_revision}")
                 return repo, resume_revision
             else:
-                logger.info(f"[git] Existing does not match SVN history")
+                logger.info("[git] Existing repo does not match SVN history")
         except:
-            logger.info(f"[git] Failure while verifying existing repo")
+            logger.info("[git] Failure while verifying existing repo")
 
     repo = create_new_git_repo(str(git_dir_path), initial_branch)
     return repo, 1
