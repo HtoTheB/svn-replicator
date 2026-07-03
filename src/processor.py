@@ -31,13 +31,7 @@ def process_svn_to_git(config):
         # Redirect the output of the logging library to work with the tqdm progress bar
         with logging_redirect_tqdm():
             # Iterate through all the revisions with progress bar
-            for i in tqdm(
-                range(1, svnRevisionCount + 1),
-                desc="Processing revisions",
-                unit=" rev",
-                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [ETA: {remaining}, {rate_fmt}]",
-                smoothing=0.02,
-            ):
+            for i in progressBar(1, svnRevisionCount, "Processing revisions"):
                 # Skip revisions that we are not supposed to look at
                 if i in config["svn"]["skipRevisions"]:
                     continue
@@ -82,7 +76,7 @@ def process_svn_to_git(config):
                             logger.debug(
                                 f"Branch {branchName} was deleted in revision {i}"
                             )
-                            # TODO: Option to choose between renaming and deleting branches
+                            
                             if config["git"]["keepDeletedBranches"]:
                                 rename_branch(
                                     gitRepo, branchName, f"del/{branchName}@{i}"

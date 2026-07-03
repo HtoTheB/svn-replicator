@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import PurePath
+from typing import Optional
 
 
 class SvnAction(Enum):
@@ -45,3 +46,4 @@ class PathChange:
     path: PurePath
     action: SvnAction
     kind: SvnNodeKind
+    copyfrom_path: Optional[PurePath] = None # If this file is copied from somewhere

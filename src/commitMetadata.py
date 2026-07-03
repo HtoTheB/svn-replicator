@@ -16,26 +16,23 @@ class CommitMetadata:
 
     message: str
 
-    # Autor (SVN-Committer)
+    # Author (SVN-Committer)
     author_name: str
     author_email: str
 
-    # Committer (kann vom Autor abweichen; default = Autor)
+    # Committer (can be different from author; default = author)
     committer_name: Optional[str] = None
     committer_email: Optional[str] = None
 
-    # Zeitstempel
+    # Timestamp
     author_date: Optional[datetime] = None
     commit_date: Optional[datetime] = None
-
-    # Eltern-Commits
-    parent_commits: Optional[Sequence[Commit]] = None
 
     # HEAD-Update?
     update_head: bool = True
 
     # -------------------------------------------------------------
-    # Hilfsfunktionen
+    # Helper functions
     # -------------------------------------------------------------
 
     @staticmethod
