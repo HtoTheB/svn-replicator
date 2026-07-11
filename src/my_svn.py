@@ -107,10 +107,17 @@ def getChangesInRevision(svnLocalClient: LocalClient, revision: int) -> List[Pat
     )
 
     changes: List[PathChange] = []
-    for p in ET.fromstringlist(xml_output).find("logentry").find("paths").findall("path"):
+    xml_changes = ET.fromstringlist(xml_output).find("logentry").find("paths").findall("path")
+    for p in xml_changes:
         if not p.text:
             continue
-
+        
+        copyfrom_path = p.attrib['copyfrom-path']
+        if copyfrom_path:
+            # We need to do something here
+            pass 
+        
+        
         changes.append(
             PathChange(
                 path=PurePath(p.text),
