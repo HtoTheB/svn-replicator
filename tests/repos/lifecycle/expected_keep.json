@@ -1,0 +1,38 @@
+{
+  "description": "Deleted branches and tags are preserved as del/<name>@<rev> refs; re-creating a branch name starts a fresh branch at the copy-from source (trunk at r4), not a continuation of the old lifetime.",
+  "config": {
+    "keepDeletedBranches": true,
+    "keepDeletedTags": true,
+    "ignoredFolders": []
+  },
+  "log": { "info": 3, "warning": 0 },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [1, "r1: init trunk", null, { "a.txt": "A1" }],
+        [4, "r4: update a", [["trunk", 1]], { "a.txt": "A2" }]
+      ]
+    },
+    "b1": {
+      "trailer_branch": "b1",
+      "commits": [
+        [7, "r7: recreate b1", [["trunk", 4]], { "a.txt": "A2" }]
+      ]
+    },
+    "del/b1@6": {
+      "trailer_branch": "b1",
+      "commits": [
+        [3, "r3: create b1", [["trunk", 1]], { "a.txt": "A1" }],
+        [5, "r5: note in b1", [["b1", 3]], { "a.txt": "A1", "note.txt": "N1" }]
+      ]
+    },
+    "del/tag/t1@9": {
+      "trailer_branch": "tag/t1",
+      "commits": [
+        [8, "r8: cut tag t1", [["trunk", 4]], { "a.txt": "A2" }]
+      ]
+    }
+  },
+  "tags": []
+}

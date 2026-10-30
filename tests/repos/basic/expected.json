@@ -1,0 +1,39 @@
+{
+  "description": "Plain branch keeps the legacy parent (trunk at r1 = the current HEAD when it was created, because the plain branch is the active branch until its own next commit); copied branch and copied tag are parented to the trunk commit at or before their copyfrom-rev, not to the currently active branch.",
+  "config": {
+    "keepDeletedBranches": false,
+    "keepDeletedTags": false,
+    "ignoredFolders": []
+  },
+  "log": { "info": 2, "warning": 0 },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [1, "r1: init trunk", null, { "a.txt": "A1", "b.txt": "B1" }],
+        [4, "r4: update a", [["trunk", 1]], { "a.txt": "A2", "b.txt": "B1" }]
+      ]
+    },
+    "plain": {
+      "trailer_branch": "plain",
+      "commits": [
+        [3, "r3: create plain branch", [["trunk", 1]], { "seed.txt": "seed" }],
+        [7, "r7: add file to plain", [["plain", 3]], { "seed.txt": "seed", "c.txt": "C1" }]
+      ]
+    },
+    "copied": {
+      "trailer_branch": "copied",
+      "commits": [
+        [5, "r5: copy branch from trunk", [["trunk", 4]], { "a.txt": "A2", "b.txt": "B1" }],
+        [8, "r8: edit copied", [["copied", 5]], { "a.txt": "A3", "b.txt": "B1" }]
+      ]
+    },
+    "tag/v1": {
+      "trailer_branch": "tag/v1",
+      "commits": [
+        [6, "r6: cut tag v1", [["trunk", 4]], { "a.txt": "A2", "b.txt": "B1" }]
+      ]
+    }
+  },
+  "tags": ["v1"]
+}
