@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 
 def _resolve_origin(br: BranchChange, rev: int, gitRepo: Repo,
                     trunk: PurePath, branches: PurePath, tags: PurePath):
-    """Resolve the git commit to parent a copy-creation to.
+    """Resolve the git commit to parent a branch created by SVN copy to.
 
-    Returns (base_commit | None, reason | None, origin_git_name | None).
-    base_commit is None iff the origin is unresolvable (reason set).
-    Never raises.
-    """
+    Returns (base_commit | None, reason | None, origin_git_name | None);
+    base_commit is None exactly when the origin is unresolvable, in which
+    case reason describes why. Failing to resolve never raises: the caller
+    then parents the branch to the current HEAD and logs the deviation."""
     origin = getBranchInfos(br.copyfrom_path, trunk, branches, tags)
     if origin is None:
         return (None,
@@ -57,8 +57,9 @@ def process_svn_to_git(config):
     trunkRoot = PurePath(config["svn"]["trunkFolder"])
     branchesRoot = PurePath(config["svn"]["branchFolder"])
     tagsRoot = PurePath(config["svn"]["tagFolder"])
-    # Materialize the ignore list: `x in <map iterator>` would consume it, so
-    # after the first check per revision every check returns False (B9).
+    # Materialize the ignore list once: 'branch_root in <map iterator>'
+    # consumes the iterator, which would exclude only the first path per
+    # revision and silently ignore the rest
     ignoredRoots = [PurePath(f) for f in config["svn"]["ignoredFolders"]]
 
     # Initialize Git repository
@@ -97,15 +98,16 @@ def process_svn_to_git(config):
                             BranchChangeType.MODIFIED,
                             BranchChangeType.ADDED,
                         ]:
-                            # Copy-origin parenting (gated: ADDED + copy-from +
-                            # missing destination ref + copyAncestors enabled)
+                            # A branch created by SVN copy is parented to the mirrored
+                            # commit of its copy-from source (resolved below). Applies
+                            # only to a destination that does not exist in the mirror
+                            # yet; existing branches are never re-parented.
                             base_commit = None
                             deviation_reason = None
                             origin_branch = None
                             if (br.type == BranchChangeType.ADDED
                                     and br.copyfrom_path is not None
-                                    and branchName not in {h.name for h in gitRepo.heads}  # D6 destination gate
-                                    and config["git"]["copyAncestors"]):
+                                    and branchName not in {h.name for h in gitRepo.heads}):
                                 base_commit, deviation_reason, origin_branch = \
                                     _resolve_origin(br, i, gitRepo,
                                                     trunkRoot, branchesRoot, tagsRoot)

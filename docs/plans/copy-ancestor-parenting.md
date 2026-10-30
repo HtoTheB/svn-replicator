@@ -2,7 +2,7 @@
 
 Implementation plan + detailed instructions.
 Branch: `copy-ancestor-parenting` (from `keepAncestorOnCopy` @ 3e5d9b1).
-State: **implemented + verified 2026-10-30** — plan committed as `1961998`, feature as `f22057d` on branch `copy-ancestor-parenting`. All §8 assertions pass (see §11).
+State: **implemented + verified 2026-10-30** — plan committed as `1961998`, feature as `f22057d` on branch `copy-ancestor-parenting`. All §8 assertions pass (see §11). 2026-10-30 follow-up (owner): the `copyAncestors` flag was REMOVED — copy-origin parenting is now unconditional default behavior (verification is done; the old parenting was plainly wrong 3 of 5 times, one branch even parented from the wrong branch). The remaining safety rails are unconditional: missing-destination-ref gate + D5 fallback-with-WARNING. All new code comments were also rewritten to a neutral, reader-facing style (no plan refs, no conversational tone).
 
 ## 0. Process & decisions log (append-only — keep current across compactions)
 
@@ -17,6 +17,7 @@ State: **implemented + verified 2026-10-30** — plan committed as `1961998`, fe
 | 2026-10-29 | @gpt-6-sol (1/15 calls) | Verdict **APPROVE-WITH-CHANGES**, 5 required changes (S1–S5 below). All verified against code/data by me; all incorporated. |
 | 2026-10-29 | @gpt-6-astra (2/10 calls; 3rd retry hit a provider quota error and returned no content, but the 2nd call's full verdict was recovered) | Verdict **BLOCK**, 11 required fixes + 3 nits (A1–A11, N1–N3 below). All verified against code/data by me; **all incorporated** into §4, §6, §7, §8. |
 | 2026-10-29 | me (verification) | Empirical results §3 (trailer parsing, WC pinning, dataset scan, path matching, ref API). |
+| 2026-10-30 | owner | **`copyAncestors` flag removed** — the old (HEAD-parented) behavior was plainly wrong (TRDPSec2.1.0.0 parented from a different branch), not an optional style choice. Parenting is now unconditional default behavior; the missing-destination-ref gate and the D5 fallback-with-WARNING remain as safety rails. All new-code comments rewritten to a neutral reader-facing style. |
 
 ### Sol's required changes and their disposition (S1–S5)
 
@@ -80,7 +81,7 @@ When an SVN branch/tag is created via `svn cp`, parent its first Git commit to t
   ```
   Log prefix `[copy-ancestor]` for greppability. Fallback NEVER aborts the mirror.
 - **D6 — Scope gates.** Only `ADDED` branch changes whose root-dir `PathChange` carries a copy-from **path**, on a **missing** git ref (the destination gate, A4), with `git.copyAncestors` enabled. Never reset existing refs. No root-`R` reparenting (deferred to B5). `A` root without copyfrom = fresh dir = legacy parenting.
-- **D7 — Config.** `git.copyAncestors` (bool, CLI `--copy-ancestors`, schema default **false**; flip user config after §8 passes). `commitMsgPrefix` becomes live; align its schema default to `true` (matches today's hardcoded behavior and both config files).
+- **D7 — Config.** `git.copyAncestors` (bool, CLI `--copy-ancestors`, schema default **false**; flip user config after §8 passes). `commitMsgPrefix` becomes live; align its schema default to `true` (matches today's hardcoded behavior and both config files). *(Post-verification update 2026-10-30: the `copyAncestors` flag was removed per owner — parenting is unconditional default behavior; see §0.)*
 
 ## 3. Verified facts & empirical results (2026-10-29)
 

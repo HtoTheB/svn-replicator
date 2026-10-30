@@ -182,8 +182,10 @@ def findAffectedBranches(
                                            copyfrom_path=change.copyfrom_path,
                                            copyfrom_rev=change.copyfrom_rev))
             elif change.copyfrom_path is not None:
-                # root 'A' with copy-from is authoritative even if a descendant change
-                # already created the aggregate as MODIFIED (XML order can vary)
+                # A root 'A' with copy-from is authoritative even if a
+                # descendant change already created the aggregate as MODIFIED
+                # (the copied root may be listed before its descendants in the
+                # same revision)
                 current.type = BranchChangeType.ADDED
                 current.copyfrom_path = change.copyfrom_path
                 current.copyfrom_rev = change.copyfrom_rev
@@ -196,9 +198,9 @@ def findAffectedBranches(
                                        isTag=isTag))
         elif not (current.type == BranchChangeType.ADDED
                   and current.copyfrom_path is not None):
-            # A copied-root creation (ADDED + copyfrom) is sticky: later descendant
-            # changes must not downgrade it (the real r1823 XML order is root A then
-            # 5 descendant A entries). Plain ADDED (no copyfrom) keeps today's behavior.
+            # An ADDED-with-copyfrom creation is sticky: later changes inside the
+            # same revision must not downgrade it (the copied root can be listed
+            # before several descendant adds in the same revision).
             current.type = BranchChangeType.MODIFIED
 
     return result
@@ -215,8 +217,8 @@ def getRevisionMetadata(svnLocalClient: LocalClient, revision: int,
     entry = next(entries)
 
     # Two trailers in ONE final paragraph, no blank line between them:
-    # splitting them into separate paragraphs makes GitPython's trailers_dict
-    # silently drop the first one.
+    # splitting them into separate paragraphs makes GitPython's
+    # trailers_dict drop all but the last one.
     message_body = (f"r{revision}: {entry.msg or ''}" if use_msg_prefix
                     else (entry.msg or ''))
     message = (f"{message_body}\n\n"

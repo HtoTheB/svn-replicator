@@ -8,7 +8,6 @@ svn:
 
 git:
   commitMsgPrefix: true # true = 'r<rev>:' subject prefix, false = plain subject (Svn-Revision/Svn-Branch trailers are added in both modes)
-  copyAncestors: false # Parent new branches to the svn copy-from source commit instead of the current HEAD
   keepDeletedBranches: false # Preserve deleted SVN branches in Git history
   keepDeletedTags: false # Preserve deleted SVN tags in Git history
 
