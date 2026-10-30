@@ -1,5 +1,4 @@
 import logging
-import re
 from typing import Optional
 from git import Repo
 import shutil
@@ -18,21 +17,16 @@ TRAILER_SVN_BRANCH = "svn-branch"
 
 
 def svn_revision_of(commit: Commit) -> Optional[int]:
-    """The mirrored SVN revision of a commit, read from its Svn-Revision trailer.
-
-    Pre-trailer commits (subject format 'r<rev>: ...') are handled by the
-    subject-line fallback. The trailer key matches case-insensitively and the
-    first value wins; a malformed trailer value returns None without falling
-    back to the subject."""
+    """The mirrored SVN revision of a commit, read from its Svn-Revision
+    trailer. The trailer key matches case-insensitively and the first value
+    wins; a malformed trailer value returns None."""
     for key, values in commit.trailers_dict.items():
         if key.lower() == TRAILER_SVN_REVISION and values:
             try:
                 return int(values[0])
             except ValueError:
                 return None
-    lines = commit.message.splitlines()
-    m = re.match(r"^r(\d+):", lines[0]) if lines else None
-    return int(m.group(1)) if m else None
+    return None
 
 
 def svn_branch_of(commit: Commit) -> Optional[str]:

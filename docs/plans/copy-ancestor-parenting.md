@@ -18,6 +18,7 @@ State: **implemented + verified 2026-10-30** — plan committed as `1961998`, fe
 | 2026-10-29 | @gpt-6-astra (2/10 calls; 3rd retry hit a provider quota error and returned no content, but the 2nd call's full verdict was recovered) | Verdict **BLOCK**, 11 required fixes + 3 nits (A1–A11, N1–N3 below). All verified against code/data by me; **all incorporated** into §4, §6, §7, §8. |
 | 2026-10-29 | me (verification) | Empirical results §3 (trailer parsing, WC pinning, dataset scan, path matching, ref API). |
 | 2026-10-30 | owner | **`copyAncestors` flag removed** — the old (HEAD-parented) behavior was plainly wrong (TRDPSec2.1.0.0 parented from a different branch), not an optional style choice. Parenting is now unconditional default behavior; the missing-destination-ref gate and the D5 fallback-with-WARNING remain as safety rails. All new-code comments rewritten to a neutral reader-facing style. |
+| 2026-10-30 | owner | **`r<rev>:` subject-line fallback in `svn_revision_of` removed** — no backward compatibility with pre-trailer commits needed (the tool rebuilds the mirror every run; branch-scoping already made such commits unusable for lookup). The trailer is now the sole source for `svn_revision_of`; absent/malformed → `None` → D5 fallback. |
 
 ### Sol's required changes and their disposition (S1–S5)
 
@@ -125,7 +126,7 @@ When an SVN branch/tag is created via `svn cp`, parent its first Git commit to t
 - `log_default` is a generator yielding entries with `.msg/.author/.date/.revision` (source inspected) — the §7.4 usage is correct.
 
 ### 3.7 Existing mirror's commits carry NO trailers
-Lookup against pre-trailer commits finds no `Svn-Branch` match → `None` → D5 fallback. Acceptable: the tool rebuilds the mirror each run. (The `r<rev>:` subject fallback in `svn_revision_of` remains for robustness, but branch-scoping makes it unusable for pre-trailer commits — by design, per S2.)
+Lookup against pre-trailer commits finds no `Svn-Branch` match → `None` → D5 fallback. Acceptable: the tool rebuilds the mirror each run. (The former `r<rev>:` subject fallback in `svn_revision_of` was removed after verification per owner — no backward compatibility; commits without the `Svn-Branch` trailer are unresolvable by design, per S2.)
 
 ## 4. Architecture (final)
 
@@ -183,7 +184,7 @@ def find_origin_commit(repo: Repo, git_branch_name: str, copyfrom_rev: int) -> C
                 logger.warning(f"[copy-ancestor] duplicate Svn-Revision {rev} on '{git_branch_name}'; keeping first found")
     return best[1] if best else None
 ```
-`svn_revision_of(c)`: `Svn-Revision` trailer (case-insensitive key, first value, `int()`) — malformed value → `None` immediately (N3); fallback `re.match(r"^r(\d+):", first line)` with empty-message guard → `None`.
+`svn_revision_of(c)`: `Svn-Revision` trailer (case-insensitive key, first value, `int()`) — absent or malformed value → `None`. (The `r<rev>:` subject-line fallback was removed after verification per owner — no backward compatibility with pre-trailer commits is needed; the tool rebuilds the mirror every run, and branch-scoping makes such commits unusable for lookup anyway.)
 `svn_branch_of(c)`: `Svn-Branch` trailer first value → `None`.
 (`first_parent=True` is an optimization only — the tool never creates merges; scoping is the trailer, per S2.)
 Performance: called ≤ once per branch/tag creation (5× in this repo); walks ≤ ~2400 commits with string checks — negligible vs SVN updates.
@@ -663,7 +664,7 @@ Expected: exit 0; exactly **4 WARNING** lines (r1809, r1823, r2269, r2428 — al
 - **Aggregation downgrade (the A2 trap)** — if only the ADD arm is fixed and the final `else` is left alone, the real r1823 creation is still missed. The §7.3 behavior matrix (esp. scenario e) must hold; the r1823 assertion in Run B is the end-to-end proof.
 - **Trailer format fragility** — locked to single final paragraph, two trailers (§3.4); parser-verified both directions (GitPython + git).
 - **All hashes change vs the old mirror** — expected and accepted (§3.3); the old mirror is stale anyway (repo grew r1558 → r2480). A/B fingerprint comparison replaces byte-identity.
-- **Branch-scoped lookup unusable on pre-trailer repos** — D5 fallback + warning (§3.7); acceptable given the tool rebuilds mirrors.
+- **Branch-scoped lookup unusable on pre-trailer repos** — D5 fallback + warning (§3.7); acceptable given the tool rebuilds mirrors. The subject-line revision fallback was removed after verification (owner: no backward compatibility needed), so commits without the `Svn-Branch` trailer are unresolvable by construction.
 - **B3** — can still abort a run on root-delete + inner-change in one revision (none in dataset; a completed Run A is the re-confirmation).
 
 ## 10. Review-gate questions for the owner
