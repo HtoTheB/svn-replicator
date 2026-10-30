@@ -57,7 +57,13 @@ CONFIG_SCHEMA = {
             "type": "bool",
             "cli": "--commit-msg-prefix",
             "required": False,
-            "default": False,
+            "default": True,        # aligned with the previous hardcoded behavior + both config files
+        },
+        "copyAncestors": {
+            "type": "bool",
+            "cli": "--copy-ancestors",
+            "required": False,
+            "default": False,       # flip in user config after verification passes
         },
         "keepDeletedBranches": {
             "type": "bool",
