@@ -7,7 +7,11 @@ For every fixture in tests/repos/:
      files (expected*.json): ref set, per-ref commit sequence (SVN
      revision, subject, parent identities, file contents), commit
      trailers, lightweight tags, and the run's [copy-ancestor] log
-     counts.
+     counts,
+  4. run the tool a SECOND time on the same SVN source into fresh working
+     directories and require the two git repositories to be identical:
+     same ref map and the same set of reachable objects (every commit,
+     tree and blob hash equal - a full reproducibility check).
 
 Only the Python standard library is used (plus git/svn on the command
 line), so it runs anywhere the tool itself runs - including GitHub
@@ -239,6 +243,36 @@ def check_mirror(fixture_name: str, exp: dict, mirror: Path):
             fail(f"{fixture_name}: tags {sorted(tag_names)} != {sorted(exp['tags'])}")
 
 
+def check_deterministic(fixture_name: str, mirror_a: Path, mirror_b: Path):
+    """Run the tool twice on the same SVN source: both git repositories
+    must have the same ref map and the same reachable object set, i.e.
+    every commit, tree and blob hash matches (full reproducibility)."""
+    def ref_map(mirror):
+        return dict(
+            line.split(" ", 1)
+            for line in run_cmd(
+                ["git", "-C", str(mirror), "for-each-ref", "refs/heads", "refs/tags",
+                 "--format=%(refname) %(objectname)"]
+            ).splitlines()
+        )
+
+    def objects(mirror):
+        out = run_cmd(["git", "-C", str(mirror), "rev-list", "--objects", "--all"])
+        return {line.split(" ")[0] for line in out.splitlines()}
+
+    map_a, map_b = ref_map(mirror_a), ref_map(mirror_b)
+    if map_a != map_b:
+        only_a = {k: v for k, v in map_a.items() if map_b.get(k) != v}
+        only_b = {k: v for k, v in map_b.items() if map_a.get(k) != v}
+        fail(f"{fixture_name}: ref maps differ between runs:\n  run1: {only_a}\n  run2: {only_b}")
+
+    obj_a, obj_b = objects(mirror_a), objects(mirror_b)
+    if obj_a != obj_b:
+        fail(f"{fixture_name}: object sets differ between runs: "
+             f"only-in-run1={sorted(obj_a - obj_b)[:5]} only-in-run2={sorted(obj_b - obj_a)[:5]}")
+    print(f"  determinism OK: {len(obj_a)} objects, ref map and all hashes identical across runs")
+
+
 def check_log(fixture_name: str, exp: dict, tool_output: str):
     expected = exp.get("log", {})
     actual_info = len(re.findall(r"INFO.*\[copy-ancestor\]", tool_output))
@@ -268,15 +302,24 @@ def run_fixture(fixture_dir: Path):
         build_fixture(fixture_dir, work)
         repo_url = f"file://{work / 'repo.svn'}"
 
+        # Run 1: expectations.
         cfg_path = work / "config.yml"
-        write_config(cfg_path, exp, repo_url, work)
-
+        write_config(cfg_path, exp, repo_url, work / "run1")
         r = run_tool(cfg_path)
         if r.returncode != 0:
             fail(f"{name} ({exp_file.name}): tool exited {r.returncode}\n{r.stdout}\n{r.stderr}")
-
         check_log(name, exp, r.stdout + r.stderr)
-        check_mirror(name, exp, work / "git_mirror")
+        check_mirror(name, exp, work / "run1" / "git_mirror")
+
+        # Run 2: same SVN source, fresh working dirs - must reproduce run 1
+        # byte for byte (same objects, same hashes, same refs).
+        cfg_path_2 = work / "config2.yml"
+        write_config(cfg_path_2, exp, repo_url, work / "run2")
+        r2 = run_tool(cfg_path_2)
+        if r2.returncode != 0:
+            fail(f"{name} ({exp_file.name}): second run exited {r2.returncode}\n{r2.stdout}\n{r2.stderr}")
+        check_log(name, exp, r2.stdout + r2.stderr)
+        check_deterministic(name, work / "run1" / "git_mirror", work / "run2" / "git_mirror")
         print(f"  PASS  {name} / {exp_file.name}")
 
 

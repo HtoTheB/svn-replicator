@@ -5,11 +5,14 @@ set of purpose-built SVN repositories, runs the tool on them, and checks that
 the resulting Git mirrors are exactly as specified (refs, per-ref commit
 sequence, subjects, parents, trailers, log output).
 
-**Status: DONE 2026-11-02.** All four fixtures green. A mutation test confirmed
-the harness FAILS when the copy-ancestor feature is broken (origin resolution
+**Status: DONE 2026-11-02.** All four fixtures green, each with the
+expectation check AND the reproducibility check (same source, second run,
+identical git objects incl. commit hashes). A mutation test confirmed the
+harness FAILS when the copy-ancestor feature is broken (origin resolution
 disabled, or the sticky-ADDED aggregation reverted) and PASSES again after
-restore. See "Findings" for the non-obvious Subversion behaviors the fixtures
-had to account for.
+restore; a negative test (randomized committer) confirmed the
+reproducibility check fires on hash differences. See "Findings" for the
+non-obvious Subversion behaviors the fixtures had to account for.
 
 ## Layout
 
@@ -28,8 +31,9 @@ docs/plans/test-harness.md  # this file
 
 - **Fixtures are generated, not stored.** Each test repo has a `build_svn_repo.py`
   that creates an `svnadmin create` repository and replays a small scripted
-  history with pinned commit dates (`--date`) and fixed messages/author. The
-  generated repo is stable across machines; nothing is committed from the harness.
+  history with fixed messages and author (commit dates are wall-clock; see
+  Findings). The generated repo is stable in *content* across machines;
+  nothing is committed from the harness.
 - **Pre/post forms per feature.** Each fixture contains scenarios in both forms
   where applicable, in the SAME run: the *pre-conversion form* (a branch created
   without copy-from → must keep the legacy parent; old behavior preserved) and
@@ -46,6 +50,14 @@ docs/plans/test-harness.md  # this file
   - optional per-commit file contents (the git tree is compared by content)
   - both trailers present on every commit; `Svn-Revision` unique per branch
   - exact `[copy-ancestor]` INFO/WARNING counts and the run's exit code
+- **Reproducibility check.** After the expectation check, the tool runs a
+  SECOND time on the same SVN source into fresh working directories. Both
+  mirrors must be identical: same ref map (heads and tags) and the same
+  reachable object set via `git rev-list --objects --all` — i.e. every
+  commit, tree and blob hash matches. This pins that the same SVN source
+  always rebuilds the same git repository, including commit hashes.
+  (Determinism is per source repository: two independently *built* fixture
+  repos cannot share hashes because their commit dates differ.)
 - **One expectation file = one (config, expected-mirror) pair.** Fixtures may
   have several (e.g. `lifecycle` runs with keep-deleted on and off).
 
@@ -96,10 +108,13 @@ pinned by an expectation so a regression is caught.
 - **A checkout of an empty repository has base revision 0.** The fixture
   commits a `.root` marker first so the working copy starts at r1; this also
   keeps `copyfrom-rev` values from being pegged at r0.
-- **Commit SHAs are not compared.** `svn 1.14` has no `--date` on commit, so
-  commit timestamps are wall-clock and differ between runs. The harness
-  compares tree object contents (content-addressed), the parent graph
-  (branch+revision identity via trailers), subjects, and log counts instead.
+- **Commit hashes are compared only within one SVN source.** `svn 1.14` has
+  no `--date` on commit, so commit timestamps are wall-clock and differ
+  between two *independently built* fixture repos — hence the expectation
+  check compares tree contents, parent graph, subjects and log counts.
+  Against the SAME source, however, the tool is fully deterministic, so the
+  second run is compared object-for-object including commit hashes (see
+  "Reproducibility check" above).
 - **A branch's first-parent walk includes its ancestors.** The mirror's
   `trunk` commit appears in a copied branch's `git log`, so the per-ref
   sequence check filters to the commits carrying that ref's own
