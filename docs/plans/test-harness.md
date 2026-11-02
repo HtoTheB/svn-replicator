@@ -5,6 +5,12 @@ set of purpose-built SVN repositories, runs the tool on them, and checks that
 the resulting Git mirrors are exactly as specified (refs, per-ref commit
 sequence, subjects, parents, trailers, log output).
 
+**Status: DONE 2026-11-02.** All four fixtures green. A mutation test confirmed
+the harness FAILS when the copy-ancestor feature is broken (origin resolution
+disabled, or the sticky-ADDED aggregation reverted) and PASSES again after
+restore. See "Findings" for the non-obvious Subversion behaviors the fixtures
+had to account for.
+
 ## Layout
 
 ```
@@ -67,4 +73,35 @@ docs/plans/test-harness.md  # this file
 
 `ci.yml` (ubuntu-latest): install `subversion` via apt, `uv sync`,
 `.venv/bin/python tests/run_tests.py`. Single job; fixtures are generated in
-the runner's temp dir.
+the runner's temp dir. The `svn` (PySvn) dependency is pure Python and shells
+out to the `svn`/`svnadmin` binaries, so only the `subversion` apt package is
+required — no C compiler or `-dev` headers.
+
+## Findings (non-obvious behaviors the fixtures encode)
+
+These were discovered while making the fixtures deterministic; each is now
+pinned by an expectation so a regression is caught.
+
+- **Working-copy copies record the SOURCE DIRECTORY's peg revision**, not the
+  repository HEAD, as `copyfrom-rev`. A URL copy (`svn cp URL URL`) records
+  the repo HEAD. After a commit, the working copy's source-dir peg is one
+  revision behind the HEAD, so a working-copy copy made without an explicit
+  `svn update` records a stale peg. `svn_fixture.SvnFixture.update()` exists
+  for exactly this; the sticky-add fixture calls it so the branch forks trunk
+  at its tip.
+- **`svn add` is recursive by default.** Adding a parent directory also adds
+  any already-added children, so a follow-up `svn add` on a child that is
+  already versioned fails with `E200009`. Build scripts add directories and
+  files in one call, not separately.
+- **A checkout of an empty repository has base revision 0.** The fixture
+  commits a `.root` marker first so the working copy starts at r1; this also
+  keeps `copyfrom-rev` values from being pegged at r0.
+- **Commit SHAs are not compared.** `svn 1.14` has no `--date` on commit, so
+  commit timestamps are wall-clock and differ between runs. The harness
+  compares tree object contents (content-addressed), the parent graph
+  (branch+revision identity via trailers), subjects, and log counts instead.
+- **A branch's first-parent walk includes its ancestors.** The mirror's
+  `trunk` commit appears in a copied branch's `git log`, so the per-ref
+  sequence check filters to the commits carrying that ref's own
+  `Svn-Branch` trailer; the ancestry is pinned separately by the per-commit
+  parent-identity assertions.

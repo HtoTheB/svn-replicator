@@ -27,9 +27,19 @@ class SvnFixture:
         self.wc = self.root / "wc"
 
     def create(self):
-        """Create an empty repository and a working copy of it."""
+        """Create an empty repository and a working copy of it.
+
+        A placeholder root file is committed first: a working copy of an
+        EMPTY repository (base revision 0) pins path pegs at r0, which makes
+        working-copy copies record wrong copyfrom-rev values. Checking out
+        at r1 avoids that.
+        """
         _run(["svnadmin", "create", str(self.repo_dir)])
         _run(["svn", "checkout", "-q", self.url, str(self.wc)])
+        (self.wc / ".root").write_text("fixture repository root marker")
+        _run(["svn", "add", str(self.wc / ".root")])
+        _run(["svn", "commit", "-q", "--username", AUTHOR,
+              "-m", "create root", str(self.wc)])
 
     def _head_rev(self) -> int:
         out = _run(["svn", "info", "--show-item", "revision", self.url])
@@ -44,6 +54,13 @@ class SvnFixture:
 
         Returns the new repository HEAD revision.
         """
+        # Repository-side operations (repo_copy/repo_delete) leave the working
+        # copy behind; sync it first so locally prepared changes do not clash
+        # with paths that only exist in the repository. The update also keeps
+        # the working copy's peg revisions current, which working-copy copies
+        # record as their copyfrom-rev (a stale peg records the wrong source
+        # snapshot, unlike a URL copy which always records the repo HEAD).
+        _run(["svn", "update", "-q", str(self.wc)])
         for d in mkdirs or []:
             (self.wc / d).mkdir(parents=True, exist_ok=True)
         for p, content in (files or {}).items():
@@ -91,3 +108,9 @@ class SvnFixture:
         single revision can contain a copied root directory together with
         new files inside it."""
         _run(["svn", "cp", str(self.wc / src_rel), str(self.wc / dst_rel)])
+
+    def update(self):
+        """Bring the working copy to the repository HEAD. Working-copy copies
+        record the source directory's peg revision as their copyfrom-rev, so
+        update first when a copy should reflect the source's tip."""
+        _run(["svn", "update", "-q", str(self.wc)])

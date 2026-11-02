@@ -21,7 +21,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -106,47 +105,68 @@ def read_mirror(mirror: Path):
     """Return (refs, identity, tag_names).
 
     refs:      ref name -> list of commits, oldest first,
-               commit = dict(rev, subject, parents=[(branch, rev) | None], sha)
+               commit = dict(rev, subject, parents=[(branch, rev)], sha)
     identity:  sha -> (svn_branch, svn_revision)
+
+    Each commit is read individually with `git cat-file -p`, which gives an
+    unambiguous header (tree / parent lines) and the raw message. All refs
+    are indexed first, then parent references are resolved, so lineages that
+    cross refs (a branch forked from another branch) resolve regardless of
+    ref order.
     """
     refs = {}
     identity = {}
     heads = run_cmd(["git", "-C", str(mirror), "for-each-ref", "refs/heads",
                      "--format=%(refname:short)"]).split()
     for ref in heads:
-        raw = run_cmd(["git", "-C", str(mirror), "log", "--reverse",
-                       "--first-parent", "--format=%H%x00%T%x00%P%x00%B", ref])
+        shas = run_cmd(["git", "-C", str(mirror), "log", "--reverse",
+                        "--first-parent", "--format=%H", ref]).split()
         commits = []
-        for entry in raw.split("\n\x00"):
-            if not entry.strip():
-                continue
-            head_part, _, body = entry.partition("\n")
-            sha, tree, parents_raw, _, subject = head_part.split("\x00", 4)
+        for sha in shas:
+            tree, parents, msg_lines, in_header = None, [], [], True
+            for line in run_cmd(["git", "-C", str(mirror), "cat-file", "-p", sha]).splitlines():
+                if in_header:
+                    if line == "":
+                        in_header = False
+                    elif line.startswith("tree "):
+                        tree = line[5:]
+                    elif line.startswith("parent "):
+                        parents.append(line[7:])
+                else:
+                    msg_lines.append(line)
+            message = "\n".join(msg_lines)
+
+            # Trailers live in the message's final paragraph.
             trailers = {}
-            for line in body.splitlines():
-                m = TRAILER_RE.match(line)
-                if m:
-                    trailers[m.group(1)] = m.group(2)
+            if message.strip():
+                for line in message.rstrip("\n").split("\n\n")[-1].splitlines():
+                    m = TRAILER_RE.match(line)
+                    if m:
+                        trailers[m.group(1)] = m.group(2)
             branch = trailers.get("Svn-Branch")
             rev = trailers.get("Svn-Revision")
             if branch is None or rev is None or not rev.isdigit():
                 fail(f"commit {sha[:8]} on {ref} lacks a parseable Svn-Revision/Svn-Branch trailer")
             identity[sha] = (branch, int(rev))
+            subject = message.splitlines()[0] if message else ""
             commits.append({
                 "sha": sha,
                 "tree": tree,
                 "rev": int(rev),
                 "subject": subject,
-                "parents": [identity.get(p) for p in parents_raw.split() if p],
+                "parents": [p for p in parents if p],
             })
         refs[ref] = commits
 
-    # Every parent of every commit must be resolvable (no dangling lineages).
+    # Second pass: resolve parent SHAs to (branch, revision) identities.
     for ref, commits in refs.items():
         for c in commits:
+            resolved = []
             for p in c["parents"]:
-                if p is None:
-                    fail(f"commit {c['sha'][:8]} on {ref} has an unresolvable parent")
+                if p not in identity:
+                    fail(f"commit {c['sha'][:8]} on {ref} has an unresolvable parent {p[:8]}")
+                resolved.append(identity[p])
+            c["parents"] = resolved
 
     tag_names = run_cmd(["git", "-C", str(mirror), "tag", "-l"]).split()
     return refs, identity, tag_names
@@ -170,7 +190,7 @@ def read_tree_files(mirror: Path, commit_sha: str):
 # ---------------------------------------------------------------------------
 
 def check_mirror(fixture_name: str, exp: dict, mirror: Path):
-    refs, _identity, tag_names = read_mirror(mirror)
+    refs, identity, tag_names = read_mirror(mirror)
 
     expected_refs = exp.get("refs", {})
     if set(refs) != set(expected_refs):
@@ -180,16 +200,21 @@ def check_mirror(fixture_name: str, exp: dict, mirror: Path):
         expected = expected_refs[name]
         actual = refs[name]
 
-        if expected.get("trailer_branch") is not None:
-            branches = {b for b, _ in (identity_of(c) for c in actual)}
-            if branches != {expected["trailer_branch"]}:
-                fail(f"{fixture_name}/{name}: Svn-Branch trailers {branches} != {{{expected['trailer_branch']!r}}}")
-
+        # A ref's first-parent walk includes the ancestors it was forked from
+        # (their commits carry the OTHER branch's Svn-Branch trailer), so the
+        # sequence check applies only to the commits this ref OWNS - the ones
+        # carrying its own Svn-Branch value. The ancestry is pinned by the
+        # per-commit parent identity assertions.
         exp_commits = expected["commits"]
-        if len(actual) != len(exp_commits):
-            fail(f"{fixture_name}/{name}: {len(actual)} commits, expected {len(exp_commits)}:\n  actual:   {[c['rev'] for c in actual]}\n  expected: {[e[0] for e in exp_commits]}")
+        if expected.get("trailer_branch") is not None:
+            own = [c for c in actual if identity[c["sha"]][0] == expected["trailer_branch"]]
+        else:
+            own = actual
 
-        for i, (e, a) in enumerate(zip(exp_commits, actual)):
+        if len(own) != len(exp_commits):
+            fail(f"{fixture_name}/{name}: {len(own)} commits, expected {len(exp_commits)}:\n  actual:   {[c['rev'] for c in own]}\n  expected: {[e[0] for e in exp_commits]}")
+
+        for i, (e, a) in enumerate(zip(exp_commits, own)):
             e_rev, e_subject, e_parents, e_files = (e + [None] * 4)[:4]
             where = f"{fixture_name}/{name} commit {i + 1}"
             if a["rev"] != e_rev:
@@ -197,8 +222,9 @@ def check_mirror(fixture_name: str, exp: dict, mirror: Path):
             if a["subject"] != e_subject:
                 fail(f"{where}: subject {a['subject']!r} != {e_subject!r}")
             if e_parents is not None:
-                if a["parents"] != e_parents:
-                    fail(f"{where}: parents {a['parents']} != {e_parents}")
+                actual_parents = [list(p) for p in a["parents"]]
+                if actual_parents != e_parents:
+                    fail(f"{where}: parents {actual_parents} != {e_parents}")
             elif a["parents"]:
                 fail(f"{where}: expected root commit (no parent), got {a['parents']}")
             if e_files is not None:
@@ -211,10 +237,6 @@ def check_mirror(fixture_name: str, exp: dict, mirror: Path):
     if "tags" in exp:
         if sorted(tag_names) != sorted(exp["tags"]):
             fail(f"{fixture_name}: tags {sorted(tag_names)} != {sorted(exp['tags'])}")
-
-
-def identity_of(commit):
-    return commit["parents"][0] if commit["parents"] else None
 
 
 def check_log(fixture_name: str, exp: dict, tool_output: str):

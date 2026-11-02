@@ -1,34 +1,82 @@
 {
-  "description": "Copies from an unmappable source (/external) and from an ignored source (/ignored) cannot be resolved: both fall back to the legacy parent (the current HEAD, the previously committed branch), each logged with exactly one [copy-ancestor] WARNING naming the assigned parent. The copy from trunk resolves normally.",
+  "description": "Copies from an unmappable source (/external) and from an ignored source (/ignored) cannot be resolved: both fall back to the legacy parent (the current HEAD - the previously committed branch), each logged with exactly one [copy-ancestor] WARNING naming the assigned parent. The copy from trunk resolves normally (and is not a coincidence: at r6 the active branch is fromOutside, so a legacy parent would be (fromOutside, 5) instead of the correct (trunk, 2)).",
   "config": {
     "keepDeletedBranches": false,
     "keepDeletedTags": false,
-    "ignoredFolders": ["/ignored/"]
+    "ignoredFolders": [
+      "/ignored/"
+    ]
   },
-  "log": { "info": 1, "warning": 2 },
+  "log": {
+    "info": 1,
+    "warning": 2
+  },
   "refs": {
     "trunk": {
       "trailer_branch": "trunk",
       "commits": [
-        [1, "r1: init trunk", null, { "a.txt": "A1" }]
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1"
+          }
+        ]
       ]
     },
     "fromIgnored": {
       "trailer_branch": "fromIgnored",
       "commits": [
-        [3, "r3: copy from ignored source", [["trunk", 1]], { "i.txt": "I1" }]
+        [
+          4,
+          "r4: copy from ignored source",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "i.txt": "I1"
+          }
+        ]
       ]
     },
     "fromOutside": {
       "trailer_branch": "fromOutside",
       "commits": [
-        [4, "r4: copy from external source", [["fromIgnored", 3]], { "e.txt": "E1" }]
+        [
+          5,
+          "r5: copy from external source",
+          [
+            [
+              "fromIgnored",
+              4
+            ]
+          ],
+          {
+            "e.txt": "E1"
+          }
+        ]
       ]
     },
     "normal": {
       "trailer_branch": "normal",
       "commits": [
-        [5, "r5: copy from trunk", [["trunk", 1]], { "a.txt": "A1" }]
+        [
+          6,
+          "r6: copy from trunk",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A1"
+          }
+        ]
       ]
     }
   },
