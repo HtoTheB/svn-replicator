@@ -66,6 +66,16 @@ def run_cmd(args, **kw):
     return r.stdout
 
 
+def git_dir_for(repo: Path) -> Path:
+    """The git directory to address explicitly: <repo>/.git for a mirror with
+    a worktree, the directory itself for a bare golden. Git commands use
+    --git-dir with this path instead of -C discovery, so they behave
+    identically wherever the checkout lives (discovery walks up into the
+    enclosing repository for a git dir that looks incomplete)."""
+    git_dir = repo / ".git"
+    return git_dir if git_dir.is_dir() else repo
+
+
 # ---------------------------------------------------------------------------
 # Running the tool
 # ---------------------------------------------------------------------------
@@ -124,15 +134,16 @@ def read_mirror(mirror: Path):
     """
     refs = {}
     identity = {}
-    heads = run_cmd(["git", "-C", str(mirror), "for-each-ref", "refs/heads",
+    git_dir = str(git_dir_for(mirror))
+    heads = run_cmd(["git", "--git-dir", git_dir, "for-each-ref", "refs/heads",
                      "--format=%(refname:short)"]).split()
     for ref in heads:
-        shas = run_cmd(["git", "-C", str(mirror), "log", "--reverse",
+        shas = run_cmd(["git", "--git-dir", git_dir, "log", "--reverse",
                         "--first-parent", "--format=%H", ref]).split()
         commits = []
         for sha in shas:
             tree, parents, msg_lines, in_header = None, [], [], True
-            for line in run_cmd(["git", "-C", str(mirror), "cat-file", "-p", sha]).splitlines():
+            for line in run_cmd(["git", "--git-dir", git_dir, "cat-file", "-p", sha]).splitlines():
                 if in_header:
                     if line == "":
                         in_header = False
@@ -176,20 +187,21 @@ def read_mirror(mirror: Path):
                 resolved.append(identity[p])
             c["parents"] = resolved
 
-    tag_names = run_cmd(["git", "-C", str(mirror), "tag", "-l"]).split()
+    tag_names = run_cmd(["git", "--git-dir", git_dir, "tag", "-l"]).split()
     return refs, identity, tag_names
 
 
 def read_tree_files(mirror: Path, commit_sha: str):
     """name -> blob content for a commit's tree (recursive, files only)."""
-    out = run_cmd(["git", "-C", str(mirror), "ls-tree", "-r", "--", commit_sha])
+    git_dir = str(git_dir_for(mirror))
+    out = run_cmd(["git", "--git-dir", git_dir, "ls-tree", "-r", "--", commit_sha])
     files = {}
     for line in out.splitlines():
         meta, _, name = line.partition("\t")
         mode, obj_type, blob = meta.split()
         if obj_type != "blob":
             fail(f"unexpected non-blob entry in tree: {line}")
-        files[name] = run_cmd(["git", "-C", str(mirror), "cat-file", "blob", blob])
+        files[name] = run_cmd(["git", "--git-dir", git_dir, "cat-file", "blob", blob])
     return files
 
 
@@ -263,14 +275,14 @@ def check_log(fixture_name: str, exp: dict, tool_output: str):
 
 def ref_map(repo: Path) -> dict:
     """ref name -> object SHA, for all heads and tags."""
-    out = run_cmd(["git", "-C", str(repo), "for-each-ref",
+    out = run_cmd(["git", "--git-dir", str(git_dir_for(repo)), "for-each-ref",
                    "refs/heads", "refs/tags", "--format=%(refname) %(objectname)"])
     return dict(line.split(" ", 1) for line in out.splitlines() if line.strip())
 
 
 def objects(repo: Path) -> set:
     """Set of every object reachable from any ref (commits, trees, blobs)."""
-    out = run_cmd(["git", "-C", str(repo), "rev-list", "--objects", "--all"])
+    out = run_cmd(["git", "--git-dir", str(git_dir_for(repo)), "rev-list", "--objects", "--all"])
     return {line.split(" ")[0] for line in out.splitlines() if line.strip()}
 
 
@@ -296,10 +308,25 @@ def compare_to_golden(fixture_name: str, stem: str, mirror: Path, golden: Path):
 
 
 def make_golden(mirror: Path, golden: Path):
-    """Replace the golden reference with a bare clone of the produced mirror."""
+    """Replace the golden reference with a bare clone of the produced mirror,
+    with every ref stored as a loose ref file (see body)."""
     if golden.exists():
         shutil.rmtree(golden)
     run_cmd(["git", "clone", "--bare", "--quiet", str(mirror), str(golden)])
+    git_dir = str(golden)
+    refs = run_cmd(["git", "--git-dir", git_dir, "for-each-ref",
+                    "--format=%(refname) %(objectname)"]).splitlines()
+    # The clone packed every ref into packed-refs and left refs/ empty; git
+    # does not track empty directories, so once the golden has been committed
+    # to the outer repository and checked out again the bare directory has no
+    # refs/ and is no longer recognized as a git repository. Recreate the
+    # refs as LOOSE files: remove packed-refs (which holds every ref), then
+    # update-ref each one - with the packed file gone each update is a real
+    # write, so refs/ survives the round-trip.
+    (golden / "packed-refs").unlink()
+    for line in refs:
+        name, sha = line.split(" ", 1)
+        run_cmd(["git", "--git-dir", git_dir, "update-ref", name, sha])
     print(f"  regenerated {golden.name} ({len(objects(golden))} objects)")
 
 
