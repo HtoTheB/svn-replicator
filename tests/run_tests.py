@@ -1,24 +1,43 @@
 """Deterministic test harness for svn-replicator.
 
-For every fixture in tests/repos/:
-  1. build a small SVN repository (tests/repos/<name>/build_svn_repo.py),
-  2. run the tool on it with the fixture's generated config,
-  3. compare the produced Git mirror against the fixture's expectation
-     files (expected*.json): ref set, per-ref commit sequence (SVN
-     revision, subject, parent identities, file contents), commit
-     trailers, lightweight tags, and the run's [copy-ancestor] log
-     counts,
-  4. run the tool a SECOND time on the same SVN source into fresh working
-     directories and require the two git repositories to be identical:
-     same ref map and the same set of reachable objects (every commit,
-     tree and blob hash equal - a full reproducibility check).
+For every fixture in tests/repos/<name>/ there is:
+  - a ready-made SVN source,  repo.svn/        (committed; read at test time)
+  - expectation file(s),       expected*.json   (structural: refs, per-ref
+                                                commit sequence, parents,
+                                                tree contents, [copy-ancestor]
+                                                log counts)
+  - a golden git reference,    <stem>.git       (committed; the exact git
+                                                repository the tool is
+                                                expected to produce)
+
+For every expectation file the harness:
+  1. runs the tool once on the committed SVN source,
+  2. checks the produced mirror structurally against expected*.json,
+  3. checks the produced mirror against the golden reference by identity:
+     same ref map and the same reachable object set, i.e. every commit,
+     tree and blob hash matches - so a run that drifts from the pinned
+     behavior (including any nondeterminism such as wall-clock or machine
+     data leaking into a commit) fails.
+
+The structural check is the DIAGNOSTIC: it names the branch, commit and
+parent that drifted. The golden check is the GUARD: it pins the exact
+output, commit hashes included, so a change between tool versions that
+alters the result is caught.
+
+Regenerating a golden (after an intentional behavior change, with the
+matching expected*.json updated first):
+    .venv/bin/python tests/run_tests.py --regen [fixture_name ...]
+The structural check must pass before a golden is rewritten, so a golden
+is always consistent with its committed expectation file.
 
 Only the Python standard library is used (plus git/svn on the command
 line), so it runs anywhere the tool itself runs - including GitHub
-Actions runners.
+Actions runners. The SVN sources are plain repositories, readable via a
+file:// URL; nothing is built at test time.
 
 Usage:
     .venv/bin/python tests/run_tests.py [fixture_name ...]
+    .venv/bin/python tests/run_tests.py --regen [fixture_name ...]
 """
 import json
 import re
@@ -45,21 +64,6 @@ def run_cmd(args, **kw):
     if r.returncode != 0:
         raise RuntimeError(f"command failed: {' '.join(args)}\n{r.stdout}\n{r.stderr}")
     return r.stdout
-
-
-# ---------------------------------------------------------------------------
-# Fixture construction
-# ---------------------------------------------------------------------------
-
-def build_fixture(fixture_dir: Path, work_dir: Path):
-    """Run the fixture's build script into work_dir."""
-    build_script = fixture_dir / "build_svn_repo.py"
-    r = subprocess.run(
-        [sys.executable, str(build_script), str(work_dir)],
-        capture_output=True, text=True,
-    )
-    if r.returncode != 0:
-        fail(f"fixture build failed:\n{r.stdout}\n{r.stderr}")
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +103,7 @@ def run_tool(cfg_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# Reading the produced Git mirror
+# Reading the produced Git mirror (structural view)
 # ---------------------------------------------------------------------------
 
 TRAILER_RE = re.compile(r"^(Svn-Revision|Svn-Branch): (.*)$")
@@ -109,7 +113,7 @@ def read_mirror(mirror: Path):
     """Return (refs, identity, tag_names).
 
     refs:      ref name -> list of commits, oldest first,
-               commit = dict(rev, subject, parents=[(branch, rev)], sha)
+                commit = dict(rev, subject, parents=[(branch, rev)], sha)
     identity:  sha -> (svn_branch, svn_revision)
 
     Each commit is read individually with `git cat-file -p`, which gives an
@@ -243,36 +247,6 @@ def check_mirror(fixture_name: str, exp: dict, mirror: Path):
             fail(f"{fixture_name}: tags {sorted(tag_names)} != {sorted(exp['tags'])}")
 
 
-def check_deterministic(fixture_name: str, mirror_a: Path, mirror_b: Path):
-    """Run the tool twice on the same SVN source: both git repositories
-    must have the same ref map and the same reachable object set, i.e.
-    every commit, tree and blob hash matches (full reproducibility)."""
-    def ref_map(mirror):
-        return dict(
-            line.split(" ", 1)
-            for line in run_cmd(
-                ["git", "-C", str(mirror), "for-each-ref", "refs/heads", "refs/tags",
-                 "--format=%(refname) %(objectname)"]
-            ).splitlines()
-        )
-
-    def objects(mirror):
-        out = run_cmd(["git", "-C", str(mirror), "rev-list", "--objects", "--all"])
-        return {line.split(" ")[0] for line in out.splitlines()}
-
-    map_a, map_b = ref_map(mirror_a), ref_map(mirror_b)
-    if map_a != map_b:
-        only_a = {k: v for k, v in map_a.items() if map_b.get(k) != v}
-        only_b = {k: v for k, v in map_b.items() if map_a.get(k) != v}
-        fail(f"{fixture_name}: ref maps differ between runs:\n  run1: {only_a}\n  run2: {only_b}")
-
-    obj_a, obj_b = objects(mirror_a), objects(mirror_b)
-    if obj_a != obj_b:
-        fail(f"{fixture_name}: object sets differ between runs: "
-             f"only-in-run1={sorted(obj_a - obj_b)[:5]} only-in-run2={sorted(obj_b - obj_a)[:5]}")
-    print(f"  determinism OK: {len(obj_a)} objects, ref map and all hashes identical across runs")
-
-
 def check_log(fixture_name: str, exp: dict, tool_output: str):
     expected = exp.get("log", {})
     actual_info = len(re.findall(r"INFO.*\[copy-ancestor\]", tool_output))
@@ -284,46 +258,98 @@ def check_log(fixture_name: str, exp: dict, tool_output: str):
 
 
 # ---------------------------------------------------------------------------
+# Golden reference: identity comparison and regeneration
+# ---------------------------------------------------------------------------
+
+def ref_map(repo: Path) -> dict:
+    """ref name -> object SHA, for all heads and tags."""
+    out = run_cmd(["git", "-C", str(repo), "for-each-ref",
+                   "refs/heads", "refs/tags", "--format=%(refname) %(objectname)"])
+    return dict(line.split(" ", 1) for line in out.splitlines() if line.strip())
+
+
+def objects(repo: Path) -> set:
+    """Set of every object reachable from any ref (commits, trees, blobs)."""
+    out = run_cmd(["git", "-C", str(repo), "rev-list", "--objects", "--all"])
+    return {line.split(" ")[0] for line in out.splitlines() if line.strip()}
+
+
+def compare_to_golden(fixture_name: str, stem: str, mirror: Path, golden: Path):
+    """The produced mirror must be identical to the golden reference:
+    same ref map and the same reachable object set, i.e. every commit, tree
+    and blob hash matches (commit hashes included)."""
+    if not golden.exists():
+        fail(f"{fixture_name} ({stem}): golden reference {golden.name} is missing - "
+             f"run with --regen to create it")
+
+    map_m, map_g = ref_map(mirror), ref_map(golden)
+    if map_m != map_g:
+        only_m = {k: v for k, v in map_m.items() if map_g.get(k) != v}
+        only_g = {k: v for k, v in map_g.items() if map_m.get(k) != v}
+        fail(f"{fixture_name} ({stem}): ref map differs from golden:\n  mirror: {only_m}\n  golden: {only_g}")
+
+    obj_m, obj_g = objects(mirror), objects(golden)
+    if obj_m != obj_g:
+        fail(f"{fixture_name} ({stem}): object set differs from golden: "
+             f"only-in-mirror={sorted(obj_m - obj_g)[:5]} only-in-golden={sorted(obj_g - obj_m)[:5]}")
+    print(f"  golden OK: {len(obj_m)} objects, ref map and all hashes match {golden.name}")
+
+
+def make_golden(mirror: Path, golden: Path):
+    """Replace the golden reference with a bare clone of the produced mirror."""
+    if golden.exists():
+        shutil.rmtree(golden)
+    run_cmd(["git", "clone", "--bare", "--quiet", str(mirror), str(golden)])
+    print(f"  regenerated {golden.name} ({len(objects(golden))} objects)")
+
+
+# ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
 
-def run_fixture(fixture_dir: Path):
+def run_fixture(fixture_dir: Path, regen: bool):
     name = fixture_dir.name
+    source = fixture_dir / "repo.svn"
+    if not (source / "db").is_dir():
+        fail(f"{name}: committed SVN source missing at {source}")
+    repo_url = f"file://{source.resolve()}"
+
     expected_files = sorted(fixture_dir.glob("expected*.json"))
     if not expected_files:
         fail(f"{name}: no expected*.json files")
 
     for exp_file in expected_files:
+        stem = exp_file.stem
         exp = json.loads(exp_file.read_text())
-        work = TMP_DIR / name / exp_file.stem
+        golden = fixture_dir / f"{stem}.git"
+
+        work = TMP_DIR / name / stem
         shutil.rmtree(work, ignore_errors=True)
         work.mkdir(parents=True)
 
-        build_fixture(fixture_dir, work)
-        repo_url = f"file://{work / 'repo.svn'}"
-
-        # Run 1: expectations.
         cfg_path = work / "config.yml"
-        write_config(cfg_path, exp, repo_url, work / "run1")
+        write_config(cfg_path, exp, repo_url, work)
         r = run_tool(cfg_path)
         if r.returncode != 0:
-            fail(f"{name} ({exp_file.name}): tool exited {r.returncode}\n{r.stdout}\n{r.stderr}")
-        check_log(name, exp, r.stdout + r.stderr)
-        check_mirror(name, exp, work / "run1" / "git_mirror")
+            fail(f"{name} ({stem}): tool exited {r.returncode}\n{r.stdout}\n{r.stderr}")
 
-        # Run 2: same SVN source, fresh working dirs - must reproduce run 1
-        # byte for byte (same objects, same hashes, same refs).
-        cfg_path_2 = work / "config2.yml"
-        write_config(cfg_path_2, exp, repo_url, work / "run2")
-        r2 = run_tool(cfg_path_2)
-        if r2.returncode != 0:
-            fail(f"{name} ({exp_file.name}): second run exited {r2.returncode}\n{r2.stdout}\n{r2.stderr}")
-        check_log(name, exp, r2.stdout + r2.stderr)
-        check_deterministic(name, work / "run1" / "git_mirror", work / "run2" / "git_mirror")
+        # Structural checks double as the gate for regeneration: a golden is
+        # only rewritten when the mirror still matches its expectation file.
+        check_log(name, exp, r.stdout + r.stderr)
+        check_mirror(name, exp, work / "git_mirror")
+
+        if regen:
+            make_golden(work / "git_mirror", golden)
+        else:
+            compare_to_golden(name, stem, work / "git_mirror", golden)
         print(f"  PASS  {name} / {exp_file.name}")
 
 
 def main(argv):
+    regen = False
+    if "--regen" in argv:
+        regen = True
+        argv = [a for a in argv if a != "--regen"]
     names = argv or None
     failures = []
     for fixture_dir in sorted((TESTS_DIR / "repos").iterdir()):
@@ -331,9 +357,9 @@ def main(argv):
             continue
         if names and fixture_dir.name not in names:
             continue
-        print(f"fixture: {fixture_dir.name}")
+        print(f"fixture: {fixture_dir.name}" + ("  [regen]" if regen else ""))
         try:
-            run_fixture(fixture_dir)
+            run_fixture(fixture_dir, regen)
         except CheckError as e:
             failures.append((fixture_dir.name, str(e)))
             print(f"  FAIL  {fixture_dir.name}: {e}")
@@ -344,7 +370,7 @@ def main(argv):
     if failures:
         print(f"\n{len(failures)} fixture(s) FAILED")
         return 1
-    print("\nall fixtures passed")
+    print("\nall fixtures passed" + (" (goldens regenerated)" if regen else ""))
     return 0
 
 
