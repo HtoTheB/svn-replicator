@@ -188,7 +188,21 @@ def read_mirror(mirror: Path):
             c["parents"] = resolved
 
     tag_names = run_cmd(["git", "--git-dir", git_dir, "tag", "-l"]).split()
-    return refs, identity, tag_names
+    # Tag name -> target commit SHA. Tags are lightweight (set_git_tag points
+    # them at the branch's newest commit), so each must equal the target of
+    # the corresponding branch head (live, or del/<name>@<rev> when preserved).
+    tag_targets = {
+        name: sha
+        for name, sha in (
+            line.split(" ", 1)
+            for line in run_cmd(
+                ["git", "--git-dir", git_dir, "for-each-ref", "refs/tags",
+                 "--format=%(refname:short) %(objectname)"]
+            ).splitlines()
+            if line.strip()
+        )
+    }
+    return refs, identity, tag_names, tag_targets
 
 
 def read_tree_files(mirror: Path, commit_sha: str):
@@ -210,7 +224,7 @@ def read_tree_files(mirror: Path, commit_sha: str):
 # ---------------------------------------------------------------------------
 
 def check_mirror(fixture_name: str, exp: dict, mirror: Path):
-    refs, identity, tag_names = read_mirror(mirror)
+    refs, identity, tag_names, tag_targets = read_mirror(mirror)
 
     expected_refs = exp.get("refs", {})
     if set(refs) != set(expected_refs):
@@ -257,16 +271,44 @@ def check_mirror(fixture_name: str, exp: dict, mirror: Path):
     if "tags" in exp:
         if sorted(tag_names) != sorted(exp["tags"]):
             fail(f"{fixture_name}: tags {sorted(tag_names)} != {sorted(exp['tags'])}")
+        for name in exp["tags"]:
+            # The tag's target branch: the live head, or the preserved
+            # deleted lifetime when keepDeletedTags is on.
+            head = f"tag/{name}"
+            if head not in refs:
+                del_heads = [h for h in refs if h.startswith(f"del/{head}@")]
+                if not del_heads:
+                    fail(f"{fixture_name}: tag '{name}' has no target branch head (looked for {head} and del/{head}@*)")
+                head = sorted(del_heads, key=lambda h: int(h.rsplit("@", 1)[1]))[0]
+            expected_target = refs[head][-1]["sha"]
+            actual_target = tag_targets.get(name)
+            if actual_target != expected_target:
+                fail(f"{fixture_name}: tag '{name}' points at {actual_target}, "
+                     f"expected the tip of {head} ({expected_target})")
 
 
 def check_log(fixture_name: str, exp: dict, tool_output: str):
     expected = exp.get("log", {})
-    actual_info = len(re.findall(r"INFO.*\[copy-ancestor\]", tool_output))
-    actual_warn = len(re.findall(r"WARNING.*\[copy-ancestor\]", tool_output))
-    if expected.get("info") is not None and actual_info != expected["info"]:
-        fail(f"{fixture_name}: {actual_info} [copy-ancestor] INFO lines, expected {expected['info']}")
-    if expected.get("warning") is not None and actual_warn != expected["warning"]:
-        fail(f"{fixture_name}: {actual_warn} [copy-ancestor] WARNING lines, expected {expected['warning']}\n{tool_output[-3000:]}")
+    info_lines = re.findall(r"INFO.*\[copy-ancestor\].*", tool_output)
+    warn_lines = re.findall(r"WARNING.*\[copy-ancestor\].*", tool_output)
+    if expected.get("info") is not None and len(info_lines) != expected["info"]:
+        fail(f"{fixture_name}: {len(info_lines)} [copy-ancestor] INFO lines, expected {expected['info']}")
+    if expected.get("warning") is not None and len(warn_lines) != expected["warning"]:
+        fail(f"{fixture_name}: {len(warn_lines)} [copy-ancestor] WARNING lines, expected {expected['warning']}\n{tool_output[-3000:]}")
+    # Per-copy attribution: each expected fallback deviation names the branch
+    # and the assigned parent (as branch + revision). Exactly one warning must
+    # match each, and it must name that parent - so two warnings for one copy
+    # and none for the other cannot satisfy a count-based check.
+    for w in expected.get("warnings", []):
+        branch, parent_rev = w["branch"], w["parent_rev"]
+        matches = [line for line in warn_lines
+                   if f"branch '{branch}'" in line and "assigned parent" in line]
+        if len(matches) != 1:
+            fail(f"{fixture_name}: expected exactly one [copy-ancestor] WARNING for branch '{branch}', got {len(matches)}")
+        m = re.search(r"assigned parent: ([0-9a-f]{8}) \(r(\d+): (.*?)\) instead", matches[0])
+        if not m or int(m.group(2)) != parent_rev:
+            fail(f"{fixture_name}: WARNING for '{branch}' does not name the assigned parent "
+                 f"at r{parent_rev}:\n{matches[0]}")
 
 
 # ---------------------------------------------------------------------------
@@ -379,6 +421,15 @@ def main(argv):
         argv = [a for a in argv if a != "--regen"]
     names = argv or None
     failures = []
+    available = sorted(d.name for d in (TESTS_DIR / "repos").iterdir() if d.is_dir())
+    if names:
+        unknown = [n for n in names if n not in available]
+        if unknown:
+            print(f"unknown fixture(s): {sorted(unknown)} (available: {available})")
+            return 1
+        if not names:
+            print("no fixture selected")
+            return 1
     for fixture_dir in sorted((TESTS_DIR / "repos").iterdir()):
         if not fixture_dir.is_dir():
             continue
