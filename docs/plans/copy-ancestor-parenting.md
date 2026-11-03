@@ -184,10 +184,10 @@ def find_origin_commit(repo: Repo, git_branch_name: str, copyfrom_rev: int) -> C
                 logger.warning(f"[copy-ancestor] duplicate Svn-Revision {rev} on '{git_branch_name}'; keeping first found")
     return best[1] if best else None
 ```
-`svn_revision_of(c)`: `Svn-Revision` trailer (case-insensitive key, first value, `int()`) — absent or malformed value → `None`. (The `r<rev>:` subject-line fallback was removed after verification per owner — no backward compatibility with pre-trailer commits is needed; the tool rebuilds the mirror every run, and branch-scoping makes such commits unusable for lookup anyway.)
-`svn_branch_of(c)`: `Svn-Branch` trailer first value → `None`.
+`svn_revision_of(c)`: `Svn-Revision` trailer (case-insensitive key, first value, `int()`) read in-process from `c.message` — absent or malformed value → `None`. (The `r<rev>:` subject-line fallback was removed after verification per owner — no backward compatibility with pre-trailer commits is needed; the tool rebuilds the mirror every run, and branch-scoping makes such commits unusable for lookup anyway.)
+`svn_branch_of(c)`: `Svn-Branch` trailer first value, read in-process from `c.message` → `None`.
 (`first_parent=True` is an optimization only — the tool never creates merges; scoping is the trailer, per S2.)
-Performance: called ≤ once per branch/tag creation (5× in this repo); walks ≤ ~2400 commits with string checks — negligible vs SVN updates.
+Performance: called ≤ once per branch/tag creation (5× in this repo); walks ≤ ~2400 commits per lookup. Both trailers are parsed in-process from `commit.message` (the tool writes them as the final paragraph) — NOT via `trailers_dict`, which shells out to `git interpret-trailers` per commit and would be ~1000× slower (4s → ~0s over a full trunk walk, measured). In-process parsing is negligible vs SVN updates.
 
 ## 5. Edge cases (final)
 
@@ -406,28 +406,46 @@ def _resolve_origin(br: BranchChange, rev: int, gitRepo: Repo,
 5. Imports: `from my_git import find_origin_commit, svn_revision_of` (explicit — the existing `from my_git import *` also covers them, but be explicit; `svn_revision_of` is needed for the success log).
 
 ### 7.6 `src/my_git.py`
-1. Add imports: `from git.objects import Commit`, `import re`, `from typing import Optional` (currently `Commit` only arrives via `from commitMetadata import *` — fragile).
+1. Add imports: `from git.objects import Commit`, `from typing import Optional` (currently `Commit` only arrives via `from commitMetadata import *` — fragile).
 2. Add module constants/helpers (top, after imports; N3 applied):
 ```python
 TRAILER_SVN_REVISION = "svn-revision"
 TRAILER_SVN_BRANCH = "svn-branch"
 
+def _trailers_of(commit: Commit) -> dict:
+    """Trailer key -> first value, lower-cased, read in-process from the
+    message's final paragraph (the tool writes both trailers there). Not via
+    trailers_dict: that shells out to git interpret-trailers per commit,
+    ~1000× slower over a full branch walk."""
+    message = commit.message or ""
+    paragraphs = message.split("\n\n")
+    if not paragraphs:
+        return {}
+    trailers = {}
+    for line in paragraphs[-1].splitlines():
+        key, sep, value = line.partition(":")
+        if not sep or not value.strip():
+            continue
+        key = key.strip().lower()
+        if key not in trailers:
+            trailers[key] = value.strip()
+    return trailers
+
+def _as_revision(value: Optional[str]) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
 def svn_revision_of(commit: Commit) -> Optional[int]:
-    for key, values in commit.trailers_dict.items():
-        if key.lower() == TRAILER_SVN_REVISION and values:
-            try:
-                return int(values[0])
-            except ValueError:
-                return None  # malformed trailer: no subject fallback (N3)
-    lines = commit.message.splitlines()
-    m = re.match(r"^r(\d+):", lines[0]) if lines else None
-    return int(m.group(1)) if m else None
+    return _as_revision(_trailers_of(commit).get(TRAILER_SVN_REVISION))
+    # malformed trailer value -> None (N3); no subject-line fallback —
+    # pre-trailer commits are unusable for lookup by design (branch-scoping).
 
 def svn_branch_of(commit: Commit) -> Optional[str]:
-    for key, values in commit.trailers_dict.items():
-        if key.lower() == TRAILER_SVN_BRANCH and values:
-            return values[0]
-    return None
+    return _trailers_of(commit).get(TRAILER_SVN_BRANCH)
 
 def find_origin_commit(repo: Repo, git_branch_name: str, copyfrom_rev: int) -> Optional[Commit]:
     # exactly per §4 (A3-correct: r.path, existing refs only, SHA dedupe, tie warning)
@@ -531,14 +549,18 @@ def ref_paths(repo, branch):
             if r.path == live or r.path.startswith(f"refs/heads/del/{branch}@")]
 
 def commits_on(repo, branch):
-    """{rev: [commit,...]} for commits whose Svn-Branch == branch (A7: trailer-keyed)."""
+    """{rev: [commit,...]} for commits whose Svn-Branch == branch (A7: trailer-keyed).
+    The same commit is reachable through several refs (live + del/...); count
+    it once."""
     out = {}
+    seen = set()
     for rp in ref_paths(repo, branch):
         for c in repo.iter_commits(rp, first_parent=True):
             if svn_branch_of(c) != branch:
                 continue
             rev = svn_revision_of(c)
-            if rev is not None:
+            if rev is not None and c.hexsha not in seen:
+                seen.add(c.hexsha)
                 out.setdefault(rev, []).append(c)
     return out
 
@@ -551,22 +573,27 @@ def largest_at_or_before(repo, branch, rev):
 
 def fingerprint(repo, outfile):
     """Per branch: ordered [(rev, tree_sha, (parent_branch, parent_rev)|None)] — parent
-    identified by ITS trailers, so fingerprints are comparable across runs (A7)."""
+    identified by ITS trailers, so fingerprints are comparable across runs (A7).
+    Branches are keyed by the Svn-Branch TRAILER value, not head.name: a tag
+    deleted in SVN and preserved under del/tag/...@<rev> still carries trailer
+    tag/..., so name-keying would drop those commits."""
+    commits = {}
+    for ref in repo.references:
+        for c in repo.iter_commits(ref, first_parent=True):
+            commits.setdefault(c.hexsha, c)
     fp = {}
-    for head in repo.heads:
-        b = head.name
-        rows = []
-        for c in repo.iter_commits(b, first_parent=True):
-            if svn_branch_of(c) != b:
-                continue
-            rev = svn_revision_of(c)
-            if rev is None:
-                print(f"FAIL {b}: commit without parseable Svn-Revision: {c.hexsha[:8]}", file=sys.stderr); sys.exit(1)
-            p = c.parents[0] if c.parents else None
-            prow = (svn_branch_of(p), svn_revision_of(p)) if p is not None else None
-            rows.append([rev, c.tree.hexsha, list(prow) if prow else None])
-        rows.reverse()  # oldest first
-        fp[b] = rows
+    for c in commits.values():
+        b = svn_branch_of(c)
+        if b is None:
+            print(f"FAIL commit without parseable Svn-Branch: {c.hexsha[:8]}", file=sys.stderr); sys.exit(1)
+        rev = svn_revision_of(c)
+        if rev is None:
+            print(f"FAIL {b}: commit without parseable Svn-Revision: {c.hexsha[:8]}", file=sys.stderr); sys.exit(1)
+        p = c.parents[0] if c.parents else None
+        prow = (svn_branch_of(p), svn_revision_of(p)) if p is not None else None
+        fp.setdefault(b, []).append([rev, c.tree.hexsha, list(prow) if prow else None])
+    for rows in fp.values():
+        rows.sort(key=lambda row: row[0])  # oldest first (revs are unique per branch)
     with open(outfile, "w") as f:
         json.dump(fp, f, indent=1)
     print(f"fingerprint: {len(fp)} branches -> {outfile}")
@@ -594,10 +621,16 @@ def compare(fpA, fpB):
                 diffs.append((b, ra[0], ra[2], rc[2]))
     expected = {(b, r) for b, r, _, _ in EXPECTED_EVENTS}
     got = {(b, r) for b, r, _, _ in diffs}
-    assert got == expected, f"parent-diff set {got} != expected {expected}"
+    # A diff may only occur where a copy event is expected. Fewer diffs than
+    # events is legitimate: where the legacy parent coincidentally already
+    # was the correct origin, no diff appears (assert_parents is the strict
+    # per-event proof in that case).
+    unexpected = got - expected
+    assert not unexpected, f"UNEXPECTED parent changes: {unexpected}"
     for b, r, pa, pb in diffs:
         print(f"  {b}@r{r}: parent A={pa} -> B={pb}")
-    print(f"compare OK: exactly the {len(diffs)} copied-branch first commits differ in parent; all trees/revs identical")
+    print(f"compare OK: {len(diffs)} parent change(s), all within the expected "
+          f"{len(expected)} copy events; all trees/revs identical")
 
 def assert_parents(repo):
     for b, crev, cfrev, origin in EXPECTED_EVENTS:

@@ -16,26 +16,47 @@ TRAILER_SVN_REVISION = "svn-revision"
 TRAILER_SVN_BRANCH = "svn-branch"
 
 
+def _trailers_of(commit: Commit) -> dict:
+    """Trailer key -> first value, lower-cased, read from the commit message
+    in-process. The tool writes both trailers as the message's final
+    paragraph, so only that paragraph is scanned. Parsed here rather than via
+    git interpret-trailers because lookup walks thousands of commits and a
+    subprocess per commit would dominate the run."""
+    message = commit.message or ""
+    paragraphs = message.split("\n\n")
+    if not paragraphs:
+        return {}
+    trailers = {}
+    for line in paragraphs[-1].splitlines():
+        key, sep, value = line.partition(":")
+        if not sep or not value.strip():
+            continue
+        key = key.strip().lower()
+        if key not in trailers:
+            trailers[key] = value.strip()
+    return trailers
+
+
+def _as_revision(value: Optional[str]) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
 def svn_revision_of(commit: Commit) -> Optional[int]:
     """The mirrored SVN revision of a commit, read from its Svn-Revision
     trailer. The trailer key matches case-insensitively and the first value
     wins; a malformed trailer value returns None."""
-    for key, values in commit.trailers_dict.items():
-        if key.lower() == TRAILER_SVN_REVISION and values:
-            try:
-                return int(values[0])
-            except ValueError:
-                return None
-    return None
+    return _as_revision(_trailers_of(commit).get(TRAILER_SVN_REVISION))
 
 
 def svn_branch_of(commit: Commit) -> Optional[str]:
     """The git branch (including the 'tag/' prefix) a commit was made on,
     read from its Svn-Branch trailer; None if the commit carries no such trailer."""
-    for key, values in commit.trailers_dict.items():
-        if key.lower() == TRAILER_SVN_BRANCH and values:
-            return values[0]
-    return None
+    return _trailers_of(commit).get(TRAILER_SVN_BRANCH)
 
 
 def find_origin_commit(repo: Repo, git_branch_name: str, copyfrom_rev: int) -> Optional[Commit]:
