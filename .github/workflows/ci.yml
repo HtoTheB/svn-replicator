@@ -15,11 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install Subversion
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq subversion
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+      - name: Prepare the runner to run the tool
+        uses: ./.github/actions/prepare
 
       - name: Install dependencies
         run: uv sync
