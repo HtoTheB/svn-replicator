@@ -2,7 +2,7 @@
 
 Implementation plan + detailed instructions.
 Branch: `copy-ancestor-parenting` (from `keepAncestorOnCopy` @ 3e5d9b1).
-State: **implemented + verified 2026-10-30** — plan committed as `1961998`, feature as `f22057d` on branch `copy-ancestor-parenting`. All §8 assertions pass (see §11). 2026-10-30 follow-up (owner): the `copyAncestors` flag was REMOVED — copy-origin parenting is now unconditional default behavior (verification is done; the old parenting was plainly wrong 3 of 5 times, one branch even parented from the wrong branch). The remaining safety rails are unconditional: missing-destination-ref gate + D5 fallback-with-WARNING. All new code comments were also rewritten to a neutral, reader-facing style (no plan refs, no conversational tone).
+State: **implemented + verified 2026-10-30** — plan committed as `2ec5bf8`, feature as `12f932e` on branch `copy-ancestor-parenting`, whose tip is `9b5a173` and which is contained in `test-harness` (tip `5b86269`). All §8 assertions pass (see §11). 2026-10-30 follow-up (owner): the `copyAncestors` flag was REMOVED — copy-origin parenting is now unconditional default behavior (verification is done; the old parenting was plainly wrong 3 of 5 times, one branch even parented from the wrong branch). The remaining safety rails are unconditional: missing-destination-ref gate + D5 fallback-with-WARNING. All new code comments were also rewritten to a neutral, reader-facing style (no plan refs, no conversational tone). (The 2026-11-03 `Assisted-by` trailer rewrite re-IDed these commits; pre-rewrite IDs: `1961998`/`f22057d`.)
 
 ## 0. Process & decisions log (append-only — keep current across compactions)
 
@@ -81,8 +81,8 @@ When an SVN branch/tag is created via `svn cp`, parent its first Git commit to t
   INFO [copy-ancestor] r<rev>: branch '<name>' copied from '<path>@r<n>' → parented to <sha8> (origin '<origin-branch>', mirrored r<m>)
   ```
   Log prefix `[copy-ancestor]` for greppability. Fallback NEVER aborts the mirror.
-- **D6 — Scope gates.** Only `ADDED` branch changes whose root-dir `PathChange` carries a copy-from **path**, on a **missing** git ref (the destination gate, A4), with `git.copyAncestors` enabled. Never reset existing refs. No root-`R` reparenting (deferred to B5). `A` root without copyfrom = fresh dir = legacy parenting.
-- **D7 — Config.** `git.copyAncestors` (bool, CLI `--copy-ancestors`, schema default **false**; flip user config after §8 passes). `commitMsgPrefix` becomes live; align its schema default to `true` (matches today's hardcoded behavior and both config files). *(Post-verification update 2026-10-30: the `copyAncestors` flag was removed per owner — parenting is unconditional default behavior; see §0.)*
+- **D6 — Scope gates.** Only `ADDED` branch changes whose root-dir `PathChange` carries a copy-from **path**, on a **missing** git ref (the destination gate, A4). Parenting is unconditional — the `git.copyAncestors` gate planned here was removed per owner; see §0. Never reset existing refs. No root-`R` reparenting (deferred to B5). `A` root without copyfrom = fresh dir = legacy parenting.
+- **D7 — Config.** *(Superseded 2026-10-30: the planned `git.copyAncestors` flag was never merged — parenting is unconditional default behavior, no flag in the schema or CLI; see §0.)* `commitMsgPrefix` becomes live; its schema default was aligned to `true` (matches the previously hardcoded behavior and both config files).
 
 ## 3. Verified facts & empirical results (2026-10-29)
 
@@ -141,8 +141,7 @@ per revision i (processor loop, unchanged skeleton):
           base_commit = deviation_reason = origin_branch = None
           if (br.type == ADDED
               and br.copyfrom_path is not None
-              and branchName not in {h.name for h in gitRepo.heads}      # D6 destination gate (A4)
-              and cfg["git"]["copyAncestors"]):
+              and branchName not in {h.name for h in gitRepo.heads}):    # D6 destination gate (A4)
               base_commit, deviation_reason, origin_branch = \
                   _resolve_origin(br, i, gitRepo, trunkRoot, branchesRoot, tagsRoot)   # 3-tuple (A9)
           switch_branch(gitRepo, branchName, True, base_commit=base_commit)
@@ -214,7 +213,9 @@ Performance: called ≤ once per branch/tag creation (5× in this repo); walks �
 
 ## 7. Detailed implementation instructions
 
-> **§7 is ONE coordinated change** (A11). Trailer emission and `commitMsgPrefix` behavior change **unconditionally** (every message gains the two trailers; the prefix flag now actually switches the subject format). Only the copy-origin parenting itself is gated by `copyAncestors`. The steps below are ordered but must be applied as a single logical change — intermediate states do not run.
+> **HISTORICAL** — as-implemented recipe of the 2026-10-30 implementation, kept for provenance. It includes the `copyAncestors` flag, which was removed by owner before the change ever shipped (see §0): the current code has no flag, no `--copy-ancestors` CLI argument, and no `copyAncestors` schema entry.
+>
+> **§7 is ONE coordinated change** (A11). Trailer emission and `commitMsgPrefix` behavior change **unconditionally** (every message gains the two trailers; the prefix flag now actually switches the subject format). The copy-origin parenting itself was gated by `copyAncestors` in this recipe. The steps below are ordered but must be applied as a single logical change — intermediate states do not run.
 
 ### 7.1 `src/pathChange.py`
 Append to `PathChange` (after `copyfrom_path`, both have defaults — order-safe):
@@ -370,6 +371,7 @@ def _resolve_origin(br: BranchChange, rev: int, gitRepo: Repo,
                         base_commit = None
                         deviation_reason = None
                         origin_branch = None
+                        # historical: as implemented 2026-10-30, before the copyAncestors flag was removed
                         if (br.type == BranchChangeType.ADDED
                                 and br.copyfrom_path is not None
                                 and branchName not in {h.name for h in gitRepo.heads}  # D6 destination gate (A4)
@@ -515,6 +517,8 @@ def switch_branch(repo: Repo, branch_name: str, create_if_missing: bool = False,
 `main.py`, `commitMetadata.py`, `helper.py`, `cloneRepo`/`initSvn`/`switchRevision` in `my_svn.py`.
 
 ## 8. Verification plan (real repo, after implementation)
+
+> **HISTORICAL** — the verification instructions and commands below date from 2026-10-30, before the `copyAncestors` flag was removed; `--copy-ancestors` is no longer a CLI argument. The results recorded in §11 stand as the feature's verification.
 
 The old mirror is **not** a baseline (§3.3: built at repo-HEAD ≈ r1558; the repo is now r2480). All runs are **fresh full replays** (the tool wipes the git dir per run). Config for all runs: the **shipped** folder config as-is (B1 retracted — §3.2), plus `--keep-deleted-branches true --keep-deleted-tags true` so every lifetime stays queryable.
 
@@ -701,6 +705,8 @@ Expected: exit 0; exactly **4 WARNING** lines (r1809, r1823, r2269, r2428 — al
 - **B3** — can still abort a run on root-delete + inner-change in one revision (none in dataset; a completed Run A is the re-confirmation).
 
 ## 10. Review-gate questions for the owner
+
+> **HISTORICAL** — all five questions were accepted on 2026-10-30 (see §0); question 2 is moot because the `copyAncestors` flag was removed instead of defaulted.
 
 1. **B1 retraction** — the shipped `"/trunk/"` folder config is CORRECT (root-absolute log paths + `getBranchInfos` matching; the old mirror was built with it). B1 is removed from the bug catalog. Confirm acceptance — and I will fix the knowledge-tab bug list accordingly.
 2. **`copyAncestors` default after verification passes**: keep schema `false` and flip only the user `config.yml` (proposed) — or flip the schema too?

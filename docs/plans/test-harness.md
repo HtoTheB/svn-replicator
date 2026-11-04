@@ -108,11 +108,14 @@ golden check is the regression test for exactly that property.
 
 ## CI
 
-`ci.yml` (ubuntu-latest): install `subversion` via apt, `uv sync`,
-`.venv/bin/python tests/run_tests.py`. Single job; the committed SVN sources
-are read in place (no generation step). The `svn` (PySvn) dependency is pure
-Python and shells out to the `svn`/`svnadmin` binaries, so only the
-`subversion` apt package is required — no C compiler or `-dev` headers.
+`ci.yml` (ubuntu-latest): install `subversion` via apt, `uv sync`, then run
+the harness. One matrix job per fixture (`tests / <fixture>` over
+`basic`, `deviation`, `lifecycle`, `sticky-add`), `fail-fast` off so a
+failure is visible per fixture and the rest still run; the trigger is every
+push plus `workflow_dispatch`. The committed SVN sources are read in place
+(no generation step). The `svn` (PySvn) dependency is pure Python and shells
+out to the `svn`/`svnadmin` binaries, so only the `subversion` apt package
+is required — no C compiler or `-dev` headers.
 
 ## Findings (non-obvious behaviors the authoring tools encode)
 
