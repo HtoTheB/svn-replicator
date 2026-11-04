@@ -1,0 +1,109 @@
+{
+  "description": "Deleted branches and tags are preserved as del/<name>@<rev> refs; re-creating a branch name starts a fresh branch at the copy-from source (trunk at r5), not a continuation of the old lifetime.",
+  "config": {
+    "keepDeletedBranches": true,
+    "keepDeletedTags": true,
+    "ignoredFolders": []
+  },
+  "log": {
+    "info": 3,
+    "warning": 0
+  },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          5,
+          "r5: update a",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ]
+      ]
+    },
+    "b1": {
+      "trailer_branch": "b1",
+      "commits": [
+        [
+          8,
+          "r8: recreate b1",
+          [
+            [
+              "trunk",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ]
+      ]
+    },
+    "del/b1@7": {
+      "trailer_branch": "b1",
+      "commits": [
+        [
+          4,
+          "r4: create b1",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          6,
+          "r6: note in b1",
+          [
+            [
+              "b1",
+              4
+            ]
+          ],
+          {
+            "a.txt": "A1",
+            "note.txt": "N1"
+          }
+        ]
+      ]
+    },
+    "del/tag/t1@10": {
+      "trailer_branch": "tag/t1",
+      "commits": [
+        [
+          9,
+          "r9: cut tag t1",
+          [
+            [
+              "trunk",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ]
+      ]
+    }
+  },
+  "tags": ["t1"]
+}

@@ -1,13 +1,97 @@
 import logging
+from typing import Optional
 from git import Repo
 import shutil
 from git import Repo, GitCommandError
+from git.objects import Commit
 from helper import *
 from pathlib import Path
 from commitMetadata import *
 
 logger = logging.getLogger(__name__)
 logging.getLogger("git").setLevel(logging.INFO)
+
+
+TRAILER_SVN_REVISION = "svn-revision"
+TRAILER_SVN_BRANCH = "svn-branch"
+
+
+def _trailers_of(commit: Commit) -> dict:
+    """Trailer key -> first value, lower-cased, read from the commit message
+    in-process. The tool writes both trailers as the message's final
+    paragraph, so only that paragraph is scanned. Parsed here rather than via
+    git interpret-trailers because lookup walks thousands of commits and a
+    subprocess per commit would dominate the run."""
+    message = commit.message or ""
+    paragraphs = message.split("\n\n")
+    if not paragraphs:
+        return {}
+    trailers = {}
+    for line in paragraphs[-1].splitlines():
+        key, sep, value = line.partition(":")
+        if not sep or not value.strip():
+            continue
+        key = key.strip().lower()
+        if key not in trailers:
+            trailers[key] = value.strip()
+    return trailers
+
+
+def _as_revision(value: Optional[str]) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def svn_revision_of(commit: Commit) -> Optional[int]:
+    """The mirrored SVN revision of a commit, read from its Svn-Revision
+    trailer. The trailer key matches case-insensitively and the first value
+    wins; a malformed trailer value returns None."""
+    return _as_revision(_trailers_of(commit).get(TRAILER_SVN_REVISION))
+
+
+def svn_branch_of(commit: Commit) -> Optional[str]:
+    """The git branch (including the 'tag/' prefix) a commit was made on,
+    read from its Svn-Branch trailer; None if the commit carries no such trailer."""
+    return _trailers_of(commit).get(TRAILER_SVN_BRANCH)
+
+
+def find_origin_commit(repo: Repo, git_branch_name: str, copyfrom_rev: int) -> Optional[Commit]:
+    """The commit to parent a copy-creation to: the commit with the largest
+    Svn-Revision <= copyfrom_rev that was committed ON git_branch_name.
+
+    A branch's git history contains its origin's ancestry, so ancestry alone
+    cannot identify the origin's own commits — the Svn-Branch trailer does.
+    Candidate refs are the branch's live ref plus any preserved deleted
+    lifetime ('del/<name>@<rev>'); they are enumerated via ref.path from
+    existing references only (str(ref) is just the branch name, and walking a
+    non-existent ref raises). The same commit reached via several refs is
+    counted once; distinct commits tied at the same revision are warned about
+    rather than picked silently. Returns None when no candidate qualifies,
+    in which case the caller falls back to the default parent and logs it."""
+    live = f"refs/heads/{git_branch_name}"
+    refs = [r.path for r in repo.references
+            if r.path == live or r.path.startswith(f"refs/heads/del/{git_branch_name}@")]
+    best = None                      # (rev, commit)
+    seen = set()
+    for ref in refs:                 # existing refs only; walking a missing ref would raise
+        for c in repo.iter_commits(ref, first_parent=True):
+            if svn_branch_of(c) != git_branch_name:      # scope to the branch's own commits
+                continue
+            rev = svn_revision_of(c)
+            if rev is None or rev > copyfrom_rev:
+                continue
+            if c.hexsha in seen:      # same commit via several refs is not a tie
+                continue
+            seen.add(c.hexsha)
+            if best is None or rev > best[0]:
+                best = (rev, c)
+            elif rev == best[0]:
+                logger.warning(f"[copy-ancestor] duplicate Svn-Revision {rev} on '{git_branch_name}'; keeping first found")
+    return best[1] if best else None
 
 
 def getGitBranchNameFromSvnPath(
@@ -71,37 +155,46 @@ def create_new_git_repo(
 
 
 def switch_branch(
-    repo: Repo, branch_name: str, create_if_missing: bool = False
+    repo: Repo, branch_name: str, create_if_missing: bool = False,
+    base_commit: Commit | None = None,
 ) -> None:
+    """Point HEAD at branch_name, creating the branch when it is missing.
+
+    An existing branch is never reset. A missing branch is created at
+    base_commit (e.g. the resolved copy-from origin) or at the current HEAD;
+    both also work while HEAD is unborn.
+    """
     ref = f"refs/heads/{branch_name}"
 
-    # Case 1: Repo has no commits yet -> unborn HEAD
-    if not repo.head.is_valid():
-        # Just set HEAD symbolism, no branch commit exists yet
+    # The branch exists -> point HEAD at it. Deleted lifetimes live under
+    # different ref names ('del/...') and can never collide with the live one.
+    if branch_name in {h.name for h in repo.heads}:
         repo.git.symbolic_ref("HEAD", ref)
         return
 
-    # Case 2: Repo already has commits
-    # Does the branch already exist?
-    if branch_name in {h.name: h for h in repo.heads}:
-        # Branch exists -> just point HEAD to this branch
+    # Unborn HEAD and no base -> nothing to create yet; the first commit
+    # writes the ref.
+    if not repo.head.is_valid() and base_commit is None:
         repo.git.symbolic_ref("HEAD", ref)
         return
 
-    # Branch does not exist yet
     if not create_if_missing:
         raise GitCommandError(
             "switch_branch",
             f"Branch '{branch_name}' does not exist and create_if_missing=False.",
         )
 
-    # Create new branch ref at current HEAD commit
-    elif repo.head.is_detached:
+    # A detached HEAD would make 'create at current HEAD' meaningless
+    # (an unborn HEAD has no commit to be detached from)
+    if repo.head.is_valid() and repo.head.is_detached:
         raise GitCommandError(
             "switch_branch", "Local Repo is corrupted, HEAD is detached"
         )
+
+    if base_commit is not None:
+        repo.create_head(branch_name, commit=base_commit.hexsha)
     else:
-        # HEAD already points to a branch; create new branch from current commit
+        # no base: create at the current HEAD commit
         repo.create_head(branch_name)
 
     # Set HEAD to the new branch

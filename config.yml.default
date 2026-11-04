@@ -7,7 +7,7 @@ svn:
   ignoredFolders: [] # List of SVN folders to ignore when processing
 
 git:
-  commitMsgPrefix: true # Add SVN revision number to git commit messages
+  commitMsgPrefix: true # true = 'r<rev>:' subject prefix, false = plain subject (Svn-Revision/Svn-Branch trailers are added in both modes)
   keepDeletedBranches: false # Preserve deleted SVN branches in Git history
   keepDeletedTags: false # Preserve deleted SVN tags in Git history
 

@@ -1,0 +1,59 @@
+{
+  "description": "With keepDeleted* off, deleted branches and tags disappear from the mirror; the re-created b1 still has its first commit parented to the copy-from source (trunk at r5).",
+  "config": {
+    "keepDeletedBranches": false,
+    "keepDeletedTags": false,
+    "ignoredFolders": []
+  },
+  "log": {
+    "info": 3,
+    "warning": 0
+  },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          5,
+          "r5: update a",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ]
+      ]
+    },
+    "b1": {
+      "trailer_branch": "b1",
+      "commits": [
+        [
+          8,
+          "r8: recreate b1",
+          [
+            [
+              "trunk",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ]
+      ]
+    }
+  },
+  "tags": []
+}

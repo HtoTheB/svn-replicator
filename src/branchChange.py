@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import PurePath
+from typing import Optional
 
 
 class BranchChangeType(Enum):
@@ -55,3 +56,5 @@ class BranchChange:
     name: str
     type: BranchChangeType
     isTag: bool = False
+    copyfrom_path: Optional[PurePath] = None
+    copyfrom_rev: Optional[int] = None

@@ -219,3 +219,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Test harness working directory (regenerated on every run)
+tests/tmp/

@@ -9,9 +9,8 @@ def main():
     config = load_config()
     
     # Set up logging based on config
-    log_level = config.get("logging", {}).get("level", "INFO")
     logging.basicConfig(
-        level=getattr(logging, log_level),
+        level=getattr(logging, config.get("logging", {}).get("level", "INFO")),
         format='[%(levelname)s] %(message)s'
     )
     logger = logging.getLogger(__name__)

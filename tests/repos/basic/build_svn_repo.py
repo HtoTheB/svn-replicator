@@ -1,0 +1,36 @@
+"""Build the 'basic' SVN fixture: plain branch (legacy parenting, behavior
+must not change) and a copied branch + copied tag (copy-origin parenting).
+
+History (r1 is the root marker commit created by SvnFixture):
+  r2 trunk {a.txt, b.txt}
+  r3 create /branches and /tags layout
+  r4 create plain branch 'plain' with a seed file (NO copy-from)
+  r5 modify trunk (a.txt)
+  r6 copy branch 'copied' from /trunk (copyfrom-rev = 5, the repo HEAD)
+  r7 cut tag 'v1' from /trunk (copyfrom-rev = 5)
+  r8 modify branch 'plain' (new file)
+  r9 modify branch 'copied' (a.txt)
+"""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from svn_fixture import SvnFixture  # noqa: E402
+
+
+def build(root: Path):
+    fx = SvnFixture(root)
+    fx.create()
+    fx.commit("init trunk", files={"trunk/a.txt": "A1", "trunk/b.txt": "B1"})
+    fx.commit("create layout", mkdirs=["branches", "tags"])
+    fx.commit("create plain branch",
+              mkdirs=["branches/plain"], files={"branches/plain/seed.txt": "seed"})
+    fx.commit("update a", files={"trunk/a.txt": "A2"})
+    fx.repo_copy("trunk", "branches/copied", "copy branch from trunk")
+    fx.repo_copy("trunk", "tags/v1", "cut tag v1")
+    fx.commit("add file to plain", files={"branches/plain/c.txt": "C1"})
+    fx.commit("edit copied", files={"branches/copied/a.txt": "A3"})
+
+
+if __name__ == "__main__":
+    build(Path(sys.argv[1]).resolve())

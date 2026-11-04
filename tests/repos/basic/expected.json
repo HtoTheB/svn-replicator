@@ -1,0 +1,129 @@
+{
+  "description": "Plain branch keeps the legacy parent (trunk at r2 = the current HEAD when it was created); copied branch and copied tag are parented to the trunk commit at or before their copyfrom-rev. The tag is the discriminating case: at its creation the active branch is 'copied', so the legacy parent would be (copied, 6) instead of the correct (trunk, 5).",
+  "config": {
+    "keepDeletedBranches": false,
+    "keepDeletedTags": false,
+    "ignoredFolders": []
+  },
+  "log": {
+    "info": 2,
+    "warning": 0
+  },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1",
+            "b.txt": "B1"
+          }
+        ],
+        [
+          5,
+          "r5: update a",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A2",
+            "b.txt": "B1"
+          }
+        ]
+      ]
+    },
+    "plain": {
+      "trailer_branch": "plain",
+      "commits": [
+        [
+          4,
+          "r4: create plain branch",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "seed.txt": "seed"
+          }
+        ],
+        [
+          8,
+          "r8: add file to plain",
+          [
+            [
+              "plain",
+              4
+            ]
+          ],
+          {
+            "seed.txt": "seed",
+            "c.txt": "C1"
+          }
+        ]
+      ]
+    },
+    "copied": {
+      "trailer_branch": "copied",
+      "commits": [
+        [
+          6,
+          "r6: copy branch from trunk",
+          [
+            [
+              "trunk",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A2",
+            "b.txt": "B1"
+          }
+        ],
+        [
+          9,
+          "r9: edit copied",
+          [
+            [
+              "copied",
+              6
+            ]
+          ],
+          {
+            "a.txt": "A3",
+            "b.txt": "B1"
+          }
+        ]
+      ]
+    },
+    "tag/v1": {
+      "trailer_branch": "tag/v1",
+      "commits": [
+        [
+          7,
+          "r7: cut tag v1",
+          [
+            [
+              "trunk",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A2",
+            "b.txt": "B1"
+          }
+        ]
+      ]
+    }
+  },
+  "tags": [
+    "v1"
+  ]
+}

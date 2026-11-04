@@ -57,7 +57,7 @@ CONFIG_SCHEMA = {
             "type": "bool",
             "cli": "--commit-msg-prefix",
             "required": False,
-            "default": False,
+            "default": True,        # aligned with the previous hardcoded behavior + both config files
         },
         "keepDeletedBranches": {
             "type": "bool",

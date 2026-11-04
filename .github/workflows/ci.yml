@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: tests / ${{ matrix.fixture }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        fixture: [basic, deviation, lifecycle, sticky-add]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Prepare the runner to run the tool
+        uses: ./.github/actions/prepare
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run deterministic mirror tests
+        run: .venv/bin/python tests/run_tests.py ${{ matrix.fixture }}

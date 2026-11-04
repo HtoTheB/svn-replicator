@@ -1,0 +1,19 @@
+name: Prepare a runner to run this tool
+description: >-
+  Installs the system dependencies and uv required to run the tool.
+  Python dependencies are not installed here; the caller runs uv (uv sync or
+  uv run) against the checked-out tool, which reads pyproject.toml and uv.lock.
+
+runs:
+  using: composite
+  steps:
+    # System packages the tool requires to run. New system (apt) dependencies
+    # are added here. Python dependencies belong in pyproject.toml, not here.
+    - name: Install system dependencies
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq subversion
+
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v7

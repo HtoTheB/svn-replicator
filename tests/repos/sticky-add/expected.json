@@ -1,0 +1,113 @@
+{
+  "description": "A branch creation by copy and new files inside it in the SAME revision (copied root listed first) must be recognized as a creation and parented to the copy-from source (trunk at its tip, r5), not to the previously active branch (plain at r4) nor treated as a modification. The new files are unversioned additions that join the copy in the same commit - the same revision shape as the real-world branch creation this guards against.",
+  "config": {
+    "keepDeletedBranches": false,
+    "keepDeletedTags": false,
+    "ignoredFolders": []
+  },
+  "log": {
+    "info": 1,
+    "warning": 0
+  },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1",
+            "b.txt": "B1"
+          }
+        ],
+        [
+          5,
+          "r5: update a",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A2",
+            "b.txt": "B1"
+          }
+        ],
+        [
+          7,
+          "r7: update b",
+          [
+            [
+              "trunk",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A2",
+            "b.txt": "B2"
+          }
+        ]
+      ]
+    },
+    "plain": {
+      "trailer_branch": "plain",
+      "commits": [
+        [
+          4,
+          "r4: create plain branch",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "seed.txt": "seed"
+          }
+        ]
+      ]
+    },
+    "feature": {
+      "trailer_branch": "feature",
+      "commits": [
+        [
+          6,
+          "r6: create feature branch from trunk",
+          [
+            [
+              "trunk",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A2",
+            "b.txt": "B1",
+            "x1.txt": "X1",
+            "x2.txt": "X2"
+          }
+        ],
+        [
+          8,
+          "r8: add x3 to feature",
+          [
+            [
+              "feature",
+              6
+            ]
+          ],
+          {
+            "a.txt": "A2",
+            "b.txt": "B1",
+            "x1.txt": "X1",
+            "x2.txt": "X2",
+            "x3.txt": "X3"
+          }
+        ]
+      ]
+    }
+  },
+  "tags": []
+}

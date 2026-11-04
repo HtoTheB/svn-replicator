@@ -9,8 +9,7 @@ from commitMetadata import CommitMetadata
 from helper import *
 import os
 import xml.etree.ElementTree as ET
-from typing import List
-from typing import Iterable
+from typing import List, Iterable, Optional
 from pathChange import *
 from branchChange import *
 
@@ -107,17 +106,26 @@ def getChangesInRevision(svnLocalClient: LocalClient, revision: int) -> List[Pat
     )
 
     changes: List[PathChange] = []
-    for p in ET.fromstringlist(xml_output).find("logentry").find("paths").findall("path"):
+    xml_changes = ET.fromstringlist(xml_output).find("logentry").find("paths").findall("path")
+    for p in xml_changes:
         if not p.text:
             continue
-
-        changes.append(
-            PathChange(
-                path=PurePath(p.text),
-                action=SvnAction.fromString(p.get("action", default="?")),
-                kind=SvnNodeKind.fromString(p.get("kind", default="?"))
-            )
-        )
+        
+        copyfrom_path = p.attrib.get("copyfrom-path")
+        copyfrom_rev_raw = p.attrib.get("copyfrom-rev")
+        copyfrom_rev: Optional[int] = None
+        if copyfrom_rev_raw:
+            try:
+                copyfrom_rev = int(copyfrom_rev_raw)
+            except ValueError:
+                logger.warning(f"r{revision}: unparseable copyfrom-rev '{copyfrom_rev_raw}' for {p.text}")
+        changes.append(PathChange(
+            path=PurePath(p.text),
+            action=SvnAction.fromString(p.get("action", default="?")),
+            kind=SvnNodeKind.fromString(p.get("kind", default="?")),
+            copyfrom_path=PurePath(copyfrom_path) if copyfrom_path else None,
+            copyfrom_rev=copyfrom_rev,
+        ))
 
     return changes
 
@@ -170,7 +178,17 @@ def findAffectedBranches(
                 result.append(BranchChange(path=branch_root,
                                            name=branch_name,
                                            type=BranchChangeType.ADDED,
-                                           isTag=isTag))
+                                           isTag=isTag,
+                                           copyfrom_path=change.copyfrom_path,
+                                           copyfrom_rev=change.copyfrom_rev))
+            elif change.copyfrom_path is not None:
+                # A root 'A' with copy-from is authoritative even if a
+                # descendant change already created the aggregate as MODIFIED
+                # (the copied root may be listed before its descendants in the
+                # same revision)
+                current.type = BranchChangeType.ADDED
+                current.copyfrom_path = change.copyfrom_path
+                current.copyfrom_rev = change.copyfrom_rev
 
         # 3) Other changes somewhere below the branch -> at least MODIFIED
         elif current is None:
@@ -178,49 +196,45 @@ def findAffectedBranches(
                                        name=branch_name,
                                        type=BranchChangeType.MODIFIED,
                                        isTag=isTag))
-        else:
+        elif not (current.type == BranchChangeType.ADDED
+                  and current.copyfrom_path is not None):
+            # An ADDED-with-copyfrom creation is sticky: later changes inside the
+            # same revision must not downgrade it (the copied root can be listed
+            # before several descendant adds in the same revision).
             current.type = BranchChangeType.MODIFIED
-        # If ADDED/DELETED is already set, leave unchanged
 
     return result
 
-# TODO: This seems to work, but why are we not using the revision parameter?
-def getRevisionMetadata(svnLocalClient: LocalClient, revision: int) -> CommitMetadata:
-    # --- Part 1: Basic data from svn info() ---
-    info = svnLocalClient.info()
-    
-    # Adjust these keys to match your info() structure if needed
-    rev = int(info["commit#revision"])  # or "commit_revision"
-
-    # --- Part 2: Metadata from svn log() for this exact revision ---
+def getRevisionMetadata(svnLocalClient: LocalClient, revision: int,
+                        git_branch_name: str, use_msg_prefix: bool) -> CommitMetadata:
+    """Commit metadata for the EXACT given revision (no info() coupling)."""
     entries = svnLocalClient.log_default(
-        revision_from=rev,
-        revision_to=rev,
+        revision_from=revision,
+        revision_to=revision,
         changelist=False,  # metadata only, no path list
     )
     # If no logs are available, it's okay to crash
     entry = next(entries)
 
-    # Adjust these field names to match your LogEntry definition if needed
-    message = f"r{rev}: {entry.msg or ''}"
+    # Two trailers in ONE final paragraph, no blank line between them:
+    # splitting them into separate paragraphs makes GitPython's
+    # trailers_dict drop all but the last one.
+    message_body = (f"r{revision}: {entry.msg or ''}" if use_msg_prefix
+                    else (entry.msg or ''))
+    message = (f"{message_body}\n\n"
+               f"Svn-Revision: {revision}\n"
+               f"Svn-Branch: {git_branch_name}")
+
     author = entry.author
-    date = entry.date  # is already a datetime object
-
-    # E-Mail: placeholder here, you can add SVN user -> email mapping later
-    author_email = f"{author}@example.invalid"
-
-    # If you want the SVN revision/URL in the Git commit text, you can add it here:
-    # message = f"r{rev} {message}"
 
     meta = CommitMetadata(
         message=message,
         author_name=author,
-        author_email=author_email,
+        author_email=f"{author}@example.invalid",
         committer_name=author,
-        committer_email=author_email,
-        author_date=date,
-        commit_date=date,
-        # You set parent_commits later in the Git part
+        committer_email=f"{author}@example.invalid",
+        author_date=entry.date,
+        commit_date=entry.date,
     )
 
     return meta
