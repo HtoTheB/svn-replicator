@@ -1,0 +1,104 @@
+{
+  "description": "Revisions 6 and 8 are skipped via svn.skipRevisions: no git commit is produced for them, leaving a gap in the trunk mirror (revs 2, 5, 10) and a gap in the b1 mirror (rev 4 only). The b2 copy at r7 records copyfrom-rev 6 - the skipped revision - so its origin resolves to trunk@r5, the largest mirrored trunk commit at or before r6; without the skip it would be trunk@r6. The r10 trunk commit is parented to trunk@r5, across the gap.",
+  "config": {
+    "keepDeletedBranches": false,
+    "keepDeletedTags": false,
+    "ignoredFolders": [],
+    "skipRevisions": [6, 8]
+  },
+  "log": {
+    "info": 2,
+    "warning": 0
+  },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          5,
+          "r5: update a",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ],
+        [
+          10,
+          "r10: update a",
+          [
+            [
+              "trunk",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A4"
+          }
+        ]
+      ]
+    },
+    "b1": {
+      "trailer_branch": "b1",
+      "commits": [
+        [
+          4,
+          "r4: create b1",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A1"
+          }
+        ]
+      ]
+    },
+    "b2": {
+      "trailer_branch": "b2",
+      "commits": [
+        [
+          7,
+          "r7: create b2",
+          [
+            [
+              "trunk",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A3"
+          }
+        ],
+        [
+          9,
+          "r9: edit b2",
+          [
+            [
+              "b2",
+              7
+            ]
+          ],
+          {
+            "a.txt": "A3",
+            "m1.txt": "M1"
+          }
+        ]
+      ]
+    }
+  }
+}
