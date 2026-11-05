@@ -109,6 +109,16 @@ class SvnFixture:
         new files inside it."""
         _run(["svn", "cp", str(self.wc / src_rel), str(self.wc / dst_rel)])
 
+    def wc_replace(self, src_rel: str, dst_rel: str):
+        """Replace a versioned working-copy path with a copy of another,
+        WITHOUT committing. The destination is deleted in the working copy
+        first (a working-copy copy into an existing path would copy INTO it
+        instead of replacing it), so the next commit() records a root R with
+        copy-from - the shape of a branch whose content is swapped
+        wholesale in one revision."""
+        _run(["svn", "delete", "-q", str(self.wc / dst_rel)])
+        _run(["svn", "cp", str(self.wc / src_rel), str(self.wc / dst_rel)])
+
     def update(self):
         """Bring the working copy to the repository HEAD. Working-copy copies
         record the source directory's peg revision as their copyfrom-rev, so

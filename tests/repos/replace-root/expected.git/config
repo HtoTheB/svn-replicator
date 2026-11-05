@@ -1,0 +1,6 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = true
+[remote "origin"]
+	url = /home/henrik/trdp/svn-replicator/tests/tmp/replace-root/expected/git_mirror

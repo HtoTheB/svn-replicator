@@ -265,8 +265,9 @@ def check_mirror(fixture_name: str, exp: dict, mirror: Path):
             if e_files is not None:
                 actual_files = read_tree_files(mirror, a["sha"])
                 if actual_files != e_files:
-                    diff = {k: (actual_files.get(k), v) for k in set(actual_files) | set(e_files)
-                            if actual_files.get(k) != v}
+                    diff = {k: (actual_files.get(k), e_files.get(k))
+                            for k in set(actual_files) | set(e_files)
+                            if actual_files.get(k) != e_files.get(k)}
                     fail(f"{where}: tree mismatch:\n  {diff}")
 
     if "tags" in exp:
