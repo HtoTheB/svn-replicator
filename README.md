@@ -17,7 +17,7 @@ A deterministic test harness pins the exact Git output of the tool. Each fixture
 
     .venv/bin/python tests/run_tests.py [fixture_name ...]
 
-`fixture_name` is one of `basic`, `deviation`, `lifecycle`, `sticky-add` (omit it to run all). See `docs/plans/test-harness.md` for the design.
+`fixture_name` is one of `basic`, `deviation`, `lifecycle`, `sticky-add`, `tag-recreate`, `branch-copy`, `subset-copy`, `plain-delete`, `replace-root`, `skip-revisions` (omit it to run all). See `docs/plans/test-harness.md` for the design.
 
 ## Contributing
 If you want to contribute, I'm happy to include your suggestions. A good starting off point would be to look at the open issues, or to create one for your idea. See `AGENTS.md` for repository conventions, including how AI-assisted commits are marked.

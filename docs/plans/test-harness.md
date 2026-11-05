@@ -7,8 +7,9 @@ on the source and requires the produced mirror to match the golden
 **byte-for-byte in identity** (ref map + every commit, tree and blob hash),
 in addition to a structural check that acts as the diagnostic.
 
-**Status: DONE 2026-11-02 (golden-reference design).** All four fixtures
-green against their committed goldens. The golden check was proven to fire
+**Status: DONE 2026-11-02 (golden-reference design); extended 2026-11-05
+with six edge-case fixtures (10 total).** All fixtures green against
+their committed goldens. The golden check was proven to fire
 on three injected faults — broken origin resolution, reverted sticky-ADDED
 aggregation, and a hash-level nondeterminism leak (randomized committer
 identity, which the structural check alone cannot see) — and to go green
@@ -90,6 +91,38 @@ are not run by the harness at test time.
    configured folders (unmappable origin): both must fall back to legacy
    parenting, log exactly one `[copy-ancestor]` WARNING each naming the
    assigned parent, and the run must still exit 0.
+5. **tag-recreate** — a tag cut, deleted and cut again under the same name
+   (the tag-side counterpart of the lifecycle re-creation): the new tag
+   starts a fresh `tag/<name>` lifetime parented to the origin, the deleted
+   lifetime is preserved as `del/tag/<name>@<rev>` (keep on) or gone (keep
+   off), and the live tag ref is force-updated to the new lifetime's tip.
+6. **branch-copy** — branches copied from another branch (not trunk) as a
+   two-hop chain (b1 from trunk, b2 from b1, b3 from b2), with trunk updates
+   interleaved so the active branch at each copy is never the copy-from
+   source: every copy must be parented to its origin (b2 to b1, b3 to b2),
+   not to the active branch tip, and origin resolution must work through a
+   branch that was itself copy-created.
+7. **subset-copy** — a branch created by copying a SUBFOLDER of another
+   branch's root (`branches/feature/sub` -> `branches/fromsubset`): the
+   copy-from path inside the feature branch must resolve to the containing
+   branch and parent the new branch to `feature`'s commit at or before the
+   `copyfrom-rev`, and the new branch's content is the subfolder's content
+   at its root.
+8. **plain-delete** — a branch created WITHOUT a copy (plain mkdir + files)
+   that is later deleted: the deletion handling is the same as for
+   copy-created branches (`del/<name>@<rev>` / gone), but the commits keep
+   the legacy parent and no `[copy-ancestor]` log lines are produced.
+9. **replace-root** — the root of an existing branch is REPLACED by a copy of
+   another branch in one revision (root `R` with copy-from). Consciously
+   pinned as a continuation (the open B4/B5 question): a normal modification
+   commit on the branch, same lineage, no re-parenting, no `[copy-ancestor]`
+   log, content swapped wholesale to the source's content. The build script
+   needs a working-copy `delete` before the `cp` (a working-copy copy into an
+   existing path would copy INTO it); `SvnFixture.wc_replace` encodes that.
+10. **skip-revisions** — two revisions skipped via `svn.skipRevisions` (a
+    trunk change and a branch change): no commit is produced for them, and a
+    branch copy whose `copyfrom-rev` IS the skipped trunk revision still
+    resolves to the largest MIRRORED trunk commit at or before it.
 
 ## Why hash comparison is valid (and a leak is a tool flaw)
 
@@ -110,7 +143,9 @@ golden check is the regression test for exactly that property.
 
 `ci.yml` (ubuntu-latest): install `subversion` via apt, `uv sync`, then run
 the harness. One matrix job per fixture (`tests / <fixture>` over
-`basic`, `deviation`, `lifecycle`, `sticky-add`), `fail-fast` off so a
+`basic`, `deviation`, `lifecycle`, `sticky-add`, `tag-recreate`,
+`branch-copy`, `subset-copy`, `plain-delete`, `replace-root`,
+`skip-revisions`), `fail-fast` off so a
 failure is visible per fixture and the rest still run; the trigger is every
 push plus `workflow_dispatch`. The committed SVN sources are read in place
 (no generation step). The `svn` (PySvn) dependency is pure Python and shells
