@@ -1,0 +1,105 @@
+{
+  "description": "A tag cut, deleted and cut again under the same name. The re-created tag starts a fresh tag/v1 lifetime parented to the trunk commit at or before the copyfrom-rev (trunk at r6), not a continuation of the deleted lifetime; the old lifetime is preserved as del/tag/v1@7. The live tag ref points at the tip of the new lifetime (force-updated on re-creation).",
+  "config": {
+    "keepDeletedBranches": true,
+    "keepDeletedTags": true,
+    "ignoredFolders": []
+  },
+  "log": {
+    "info": 2,
+    "warning": 0
+  },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          4,
+          "r4: update a",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ],
+        [
+          6,
+          "r6: update a",
+          [
+            [
+              "trunk",
+              4
+            ]
+          ],
+          {
+            "a.txt": "A3"
+          }
+        ],
+        [
+          9,
+          "r9: update a",
+          [
+            [
+              "trunk",
+              6
+            ]
+          ],
+          {
+            "a.txt": "A4"
+          }
+        ]
+      ]
+    },
+    "tag/v1": {
+      "trailer_branch": "tag/v1",
+      "commits": [
+        [
+          8,
+          "r8: recreate tag v1",
+          [
+            [
+              "trunk",
+              6
+            ]
+          ],
+          {
+            "a.txt": "A3"
+          }
+        ]
+      ]
+    },
+    "del/tag/v1@7": {
+      "trailer_branch": "tag/v1",
+      "commits": [
+        [
+          5,
+          "r5: cut tag v1",
+          [
+            [
+              "trunk",
+              4
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ]
+      ]
+    }
+  },
+  "tags": [
+    "v1"
+  ]
+}
