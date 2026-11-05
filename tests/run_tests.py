@@ -83,9 +83,10 @@ def git_dir_for(repo: Path) -> Path:
 def write_config(cfg_path: Path, fixture: dict, repo_url: str, work_base: Path):
     cfg = fixture.get("config", {})
     ignored = cfg.get("ignoredFolders", [])
+    skip = cfg.get("skipRevisions", [])
     yaml_text = f"""svn:
   remoteURI: "{repo_url}"
-  skipRevisions: []
+  skipRevisions: {json.dumps(skip)}
   trunkFolder: "/trunk/"
   branchFolder: "/branches/"
   tagFolder: "/tags/"
