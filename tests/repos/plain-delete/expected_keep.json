@@ -1,0 +1,85 @@
+{
+  "description": "A plain (non-copied) branch that is deleted, with keep settings on: the ref is preserved as del/plain@7 and the branch's commits keep the legacy parent (trunk@r2, the active branch tip at creation). No copy is involved anywhere, so no [copy-ancestor] log lines are expected.",
+  "config": {
+    "keepDeletedBranches": true,
+    "keepDeletedTags": true,
+    "ignoredFolders": []
+  },
+  "log": {
+    "info": 0,
+    "warning": 0
+  },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          5,
+          "r5: update a",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ],
+        [
+          8,
+          "r8: update a",
+          [
+            [
+              "trunk",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A3"
+          }
+        ]
+      ]
+    },
+    "del/plain@7": {
+      "trailer_branch": "plain",
+      "commits": [
+        [
+          4,
+          "r4: create plain branch",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "seed.txt": "seed"
+          }
+        ],
+        [
+          6,
+          "r6: note in plain",
+          [
+            [
+              "plain",
+              4
+            ]
+          ],
+          {
+            "seed.txt": "seed",
+            "n1.txt": "N1"
+          }
+        ]
+      ]
+    }
+  }
+}
