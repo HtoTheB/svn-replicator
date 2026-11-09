@@ -9,7 +9,7 @@ History (r1 is the root marker commit created by SvnFixture):
   r5 cut tag v1 from /trunk         (copyfrom-rev 4)
   r6 trunk a -> A3
   r7 delete tags/v1
-  r8 cut tag v1 from /trunk again   (copyfrom-rev 6, re-creation)
+  r8 cut tag v1 from /trunk again   (copyfrom-rev 7, re-creation)
   r9 trunk a -> A4
 """
 import sys

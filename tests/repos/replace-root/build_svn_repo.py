@@ -15,7 +15,7 @@ History (r1 is the root marker commit created by SvnFixture):
   r3 layout
   r4 plain branch p1 {seed} (no copy-from)
   r5 trunk a -> A2
-  r6 replace branches/p1 with a copy of /trunk (root R, copyfrom-rev 5 -> p1 keeps its lineage)
+  r6 replace branches/p1 with a copy of /trunk (root R from /trunk:4 -> p1 keeps its lineage)
   r7 p1 + n1
 """
 import sys
