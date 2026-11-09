@@ -7,7 +7,7 @@ To use this tool you set up a config for an SVN repository you want to mirror on
 Large language models (LLMs) were used in the development process of this tool — for design, implementation, review and documentation. Commits created with AI assistance are recorded with an `Assisted-by: LLM` trailer, so the contribution can be audited in the history; see `AGENTS.md` for the convention. The design decisions and the review of the result are the maintainer's.
 
 ## How it preserves history
-The tool replays every SVN revision from 1 to HEAD and creates one Git commit per affected branch, so the Git history is a branch-aware transcript of the SVN history. Two behaviors worth knowing:
+The tool replays every SVN revision from 1 to HEAD and creates one Git commit per affected branch, so the Git history is a branch-aware transcript of the SVN history. `docs/behavior.md` is the normative specification of the exact behavior the tool is expected to have; the two behaviors worth knowing most:
 
 - **Copied branches keep their origin.** When a branch or tag is created with `svn cp`, its first Git commit is parented to the mirrored commit of the copy-from source (at `copyfrom-rev`) rather than to whichever branch the replay loop happened to be on. If the origin cannot be resolved, the tool falls back to the previous parent and logs a WARNING that names the parent it actually assigned.
 - **Every commit is annotated.** Each mirrored commit carries two trailers — `Svn-Revision: <rev>` and `Svn-Branch: <git-branch>` — so the mapping back to the SVN source is always recoverable from the Git repository alone, with no extra state.
@@ -17,7 +17,7 @@ A deterministic test harness pins the exact Git output of the tool. Each fixture
 
     .venv/bin/python tests/run_tests.py [fixture_name ...]
 
-`fixture_name` is one of `basic`, `deviation`, `lifecycle`, `sticky-add`, `tag-recreate`, `branch-copy`, `subset-copy`, `plain-delete`, `replace-root`, `skip-revisions` (omit it to run all). See `docs/plans/test-harness.md` for the design.
+`fixture_name` is one of `basic`, `deviation`, `lifecycle`, `sticky-add`, `tag-recreate`, `branch-copy`, `subset-copy`, `plain-delete`, `replace-root`, `skip-revisions` (omit it to run all). See `docs/behavior.md` for the expected behavior the fixtures pin, and `docs/plans/test-harness.md` for the harness design.
 
 ## Contributing
 If you want to contribute, I'm happy to include your suggestions. A good starting off point would be to look at the open issues, or to create one for your idea. See `AGENTS.md` for repository conventions, including how AI-assisted commits are marked.

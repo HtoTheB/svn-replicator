@@ -1,7 +1,9 @@
 # Test harness plan
 
 Goal: a deterministic test harness runnable on GitHub Actions that pins the
-exact Git output of the tool. Each fixture is a ready-made SVN source
+exact Git output of the tool. The normative specification of that behavior
+(the rules the fixtures pin) is `docs/behavior.md`; its last section maps
+each spec section to the fixtures that pin it. Each fixture is a ready-made SVN source
 (committed) plus a committed golden git reference; the harness runs the tool
 on the source and requires the produced mirror to match the golden
 **byte-for-byte in identity** (ref map + every commit, tree and blob hash),
