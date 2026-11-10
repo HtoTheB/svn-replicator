@@ -36,8 +36,12 @@ Actions runners. The SVN sources are plain repositories, readable via a
 file:// URL; nothing is built at test time.
 
 Usage:
-    .venv/bin/python tests/run_tests.py [fixture_name ...]
-    .venv/bin/python tests/run_tests.py --regen [fixture_name ...]
+    .venv/bin/python tests/run_tests.py [stage ...]
+    .venv/bin/python tests/run_tests.py --regen [stage ...]
+
+A stage is a fixture name (runs every expectation file in it) or a single
+expectation file as 'fixture/stem' (the file name without '.json'), e.g.
+'lifecycle' or 'lifecycle/expected_keep'.
 """
 import json
 import re
@@ -378,7 +382,9 @@ def make_golden(mirror: Path, golden: Path):
 # Driver
 # ---------------------------------------------------------------------------
 
-def run_fixture(fixture_dir: Path, regen: bool):
+def run_fixture(fixture_dir: Path, regen: bool, stem: str | None = None):
+    """Run a fixture. stem limits the run to one expectation file (the file
+    name without '.json'); None runs every expected*.json in the fixture."""
     name = fixture_dir.name
     source = fixture_dir / "repo.svn"
     if not (source / "db").is_dir():
@@ -386,6 +392,11 @@ def run_fixture(fixture_dir: Path, regen: bool):
     repo_url = f"file://{source.resolve()}"
 
     expected_files = sorted(fixture_dir.glob("expected*.json"))
+    if stem is not None:
+        expected_files = [f for f in expected_files if f.stem == stem]
+        if not expected_files:
+            available = ", ".join(f.stem for f in sorted(fixture_dir.glob("expected*.json")))
+            fail(f"{name}: no expectation file with stem '{stem}' (available: {available})")
     if not expected_files:
         fail(f"{name}: no expected*.json files")
 
@@ -421,25 +432,29 @@ def main(argv):
     if "--regen" in argv:
         regen = True
         argv = [a for a in argv if a != "--regen"]
-    names = argv or None
+    selections = argv or None
     failures = []
     available = sorted(d.name for d in (TESTS_DIR / "repos").iterdir() if d.is_dir())
-    if names:
-        unknown = [n for n in names if n not in available]
+    if selections:
+        unknown = [s for s in selections if s.split("/", 1)[0] not in available]
         if unknown:
             print(f"unknown fixture(s): {sorted(unknown)} (available: {available})")
             return 1
-        if not names:
-            print("no fixture selected")
+        if not selections:
+            print("no stage selected")
             return 1
     for fixture_dir in sorted((TESTS_DIR / "repos").iterdir()):
         if not fixture_dir.is_dir():
             continue
-        if names and fixture_dir.name not in names:
+        # A selection is either the fixture name (all its expectation files)
+        # or 'fixture/stem' (a single expectation file).
+        sel = next((s for s in (selections or []) if s == fixture_dir.name or s.startswith(fixture_dir.name + "/")), None)
+        if selections and sel is None:
             continue
-        print(f"fixture: {fixture_dir.name}" + ("  [regen]" if regen else ""))
+        stem = sel.removeprefix(fixture_dir.name + "/") if (sel and "/" in sel) else None
+        print(f"fixture: {fixture_dir.name}" + (f"/{stem}" if stem else "") + ("  [regen]" if regen else ""))
         try:
-            run_fixture(fixture_dir, regen)
+            run_fixture(fixture_dir, regen, stem)
         except CheckError as e:
             failures.append((fixture_dir.name, str(e)))
             print(f"  FAIL  {fixture_dir.name}: {e}")
