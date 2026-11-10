@@ -1,0 +1,87 @@
+{
+  "description": "Same history as expected_keep, but deleted branches and tags are not preserved: the first lifetime of tag v1 disappears entirely on deletion, and the re-created tag is an ordinary new tag ref. The golden pins that no del/ ref and no trace of the first lifetime survives.",
+  "config": {
+    "keepDeletedBranches": false,
+    "keepDeletedTags": false,
+    "ignoredFolders": []
+  },
+  "log": {
+    "info": 2,
+    "warning": 0
+  },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          4,
+          "r4: update a",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ],
+        [
+          6,
+          "r6: update a",
+          [
+            [
+              "trunk",
+              4
+            ]
+          ],
+          {
+            "a.txt": "A3"
+          }
+        ],
+        [
+          9,
+          "r9: update a",
+          [
+            [
+              "trunk",
+              6
+            ]
+          ],
+          {
+            "a.txt": "A4"
+          }
+        ]
+      ]
+    },
+    "tag/v1": {
+      "trailer_branch": "tag/v1",
+      "commits": [
+        [
+          8,
+          "r8: recreate tag v1",
+          [
+            [
+              "trunk",
+              6
+            ]
+          ],
+          {
+            "a.txt": "A3"
+          }
+        ]
+      ]
+    }
+  },
+  "tags": [
+    "v1"
+  ]
+}

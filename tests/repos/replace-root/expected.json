@@ -1,0 +1,86 @@
+{
+  "description": "The root of an existing branch is replaced by a copy of another branch. Pinned as a continuation (B4/B5 open): the replace revision is a normal modification commit on the existing branch - same lineage (parent p1@r4), no re-parenting, no [copy-ancestor] log - and the branch's content is swapped wholesale to the source's content (seed.txt gone, a.txt present) plus subsequent edits.",
+  "config": {
+    "keepDeletedBranches": false,
+    "keepDeletedTags": false,
+    "ignoredFolders": []
+  },
+  "log": {
+    "info": 0,
+    "warning": 0
+  },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          5,
+          "r5: update a",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ]
+      ]
+    },
+    "p1": {
+      "trailer_branch": "p1",
+      "commits": [
+        [
+          4,
+          "r4: create p1",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "seed.txt": "seed"
+          }
+        ],
+        [
+          6,
+          "r6: replace p1 with trunk",
+          [
+            [
+              "p1",
+              4
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ],
+        [
+          7,
+          "r7: note in p1",
+          [
+            [
+              "p1",
+              6
+            ]
+          ],
+          {
+            "a.txt": "A2",
+            "n1.txt": "N1"
+          }
+        ]
+      ]
+    }
+  },
+  "tags": []
+}

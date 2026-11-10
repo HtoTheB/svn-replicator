@@ -1,0 +1,170 @@
+{
+  "description": "Branches copied from another branch (not trunk), including a two-hop chain: b1 from trunk, b2 from b1, b3 from b2. Each copied branch's first commit is parented to the mirrored commit of its copy-from source at or before the copyfrom-rev - b2 to b1@r5 and b3 to b2@r8 - not to the active branch tip (the trunk commits r6/r9), which is what the legacy parenting would produce. The chain also proves origin resolution through a branch that was itself copy-created.",
+  "config": {
+    "keepDeletedBranches": false,
+    "keepDeletedTags": false,
+    "ignoredFolders": []
+  },
+  "log": {
+    "info": 3,
+    "warning": 0
+  },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          6,
+          "r6: update a",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ],
+        [
+          9,
+          "r9: update a",
+          [
+            [
+              "trunk",
+              6
+            ]
+          ],
+          {
+            "a.txt": "A3"
+          }
+        ]
+      ]
+    },
+    "b1": {
+      "trailer_branch": "b1",
+      "commits": [
+        [
+          4,
+          "r4: create b1",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          5,
+          "r5: note in b1",
+          [
+            [
+              "b1",
+              4
+            ]
+          ],
+          {
+            "a.txt": "A1",
+            "n1.txt": "N1"
+          }
+        ],
+        [
+          12,
+          "r12: update b1 note",
+          [
+            [
+              "b1",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A1",
+            "n1.txt": "N2"
+          }
+        ]
+      ]
+    },
+    "b2": {
+      "trailer_branch": "b2",
+      "commits": [
+        [
+          7,
+          "r7: create b2 from b1",
+          [
+            [
+              "b1",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A1",
+            "n1.txt": "N1"
+          }
+        ],
+        [
+          8,
+          "r8: edit b2",
+          [
+            [
+              "b2",
+              7
+            ]
+          ],
+          {
+            "a.txt": "A1",
+            "n1.txt": "N1",
+            "m1.txt": "M1"
+          }
+        ]
+      ]
+    },
+    "b3": {
+      "trailer_branch": "b3",
+      "commits": [
+        [
+          10,
+          "r10: create b3 from b2",
+          [
+            [
+              "b2",
+              8
+            ]
+          ],
+          {
+            "a.txt": "A1",
+            "n1.txt": "N1",
+            "m1.txt": "M1"
+          }
+        ],
+        [
+          11,
+          "r11: edit b3",
+          [
+            [
+              "b3",
+              10
+            ]
+          ],
+          {
+            "a.txt": "A1",
+            "n1.txt": "N1",
+            "m1.txt": "M1",
+            "m2.txt": "M2"
+          }
+        ]
+      ]
+    }
+  },
+  "tags": []
+}

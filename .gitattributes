@@ -1,0 +1,6 @@
+# Committed test data: machine-generated SVN sources (repo.svn) and golden
+# git references (*.git) under tests/repos. They are inputs to and references
+# for the test harness, not source code of the tool; keep them out of
+# language statistics (GitHub Linguist treats vendored paths as such).
+tests/repos/*/repo.svn/** linguist-vendored
+tests/repos/*/*.git/** linguist-vendored

@@ -1,0 +1,105 @@
+{
+  "description": "A branch created by copying a SUBFOLDER of another branch's root (branches/feature/sub -> branches/fromsubset), not the branch root itself. The copy-from path is inside the feature branch, so origin resolution must map the copy-from path to the containing branch and parent fromsubset to feature's commit at or before the copyfrom-rev (feature@r5) - not to the active branch tip trunk@r6, which the legacy parenting would produce. The new branch's content is the copied subfolder's content at its root.",
+  "config": {
+    "keepDeletedBranches": false,
+    "keepDeletedTags": false,
+    "ignoredFolders": []
+  },
+  "log": {
+    "info": 2,
+    "warning": 0
+  },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          6,
+          "r6: update a",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ]
+      ]
+    },
+    "feature": {
+      "trailer_branch": "feature",
+      "commits": [
+        [
+          4,
+          "r4: create feature",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          5,
+          "r5: add subfolder in feature",
+          [
+            [
+              "feature",
+              4
+            ]
+          ],
+          {
+            "a.txt": "A1",
+            "sub/s1.txt": "S1"
+          }
+        ]
+      ]
+    },
+    "fromsubset": {
+      "trailer_branch": "fromsubset",
+      "commits": [
+        [
+          7,
+          "r7: create fromsubset from feature/sub",
+          [
+            [
+              "feature",
+              5
+            ]
+          ],
+          {
+            "s1.txt": "S1"
+          }
+        ],
+        [
+          8,
+          "r8: edit fromsubset",
+          [
+            [
+              "fromsubset",
+              7
+            ]
+          ],
+          {
+            "s1.txt": "S1",
+            "x1.txt": "X1"
+          }
+        ]
+      ]
+    }
+  },
+  "tags": []
+}

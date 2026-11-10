@@ -1,0 +1,54 @@
+{
+  "description": "Same history as expected_keep, but deleted branches are not preserved: the plain branch's ref is deleted entirely at r7 and no trace of it remains in the ref map.",
+  "config": {
+    "keepDeletedBranches": false,
+    "keepDeletedTags": false,
+    "ignoredFolders": []
+  },
+  "log": {
+    "info": 0,
+    "warning": 0
+  },
+  "refs": {
+    "trunk": {
+      "trailer_branch": "trunk",
+      "commits": [
+        [
+          2,
+          "r2: init trunk",
+          null,
+          {
+            "a.txt": "A1"
+          }
+        ],
+        [
+          5,
+          "r5: update a",
+          [
+            [
+              "trunk",
+              2
+            ]
+          ],
+          {
+            "a.txt": "A2"
+          }
+        ],
+        [
+          8,
+          "r8: update a",
+          [
+            [
+              "trunk",
+              5
+            ]
+          ],
+          {
+            "a.txt": "A3"
+          }
+        ]
+      ]
+    }
+  },
+  "tags": []
+}

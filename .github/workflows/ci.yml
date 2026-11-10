@@ -11,7 +11,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        fixture: [basic, deviation, lifecycle, sticky-add]
+        fixture: [basic, deviation, lifecycle, sticky-add,
+                  tag-recreate, branch-copy, subset-copy, plain-delete,
+                  replace-root, skip-revisions]
     steps:
       - uses: actions/checkout@v5
 
