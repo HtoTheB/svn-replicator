@@ -3,9 +3,6 @@ This project aims to provide a tool to continuously mirror svn repos into a git 
 
 To use this tool you set up a config for an SVN repository you want to mirror once. Regularly calling this tool will create a git repository that mirrors the SVN repository, including the history. It will keep the mirrored repo up to date automatically. The tool maintains a local Git mirror; it does not push to a Git remote — you push the mirror yourself when you want to.
 
-## AI in development
-Large language models (LLMs) were used in the development process of this tool — for design, implementation, review and documentation. Commits created with AI assistance are recorded with an `Assisted-by: LLM` trailer, so the contribution can be audited in the history; see `AGENTS.md` for the convention. The design decisions and the review of the result are the maintainer's.
-
 ## How it preserves history
 The tool replays every SVN revision from 1 to HEAD and creates one Git commit per affected branch, so the Git history is a branch-aware transcript of the SVN history. `docs/behavior.md` is the normative specification of the exact behavior the tool is expected to have; the two behaviors worth knowing most:
 
@@ -32,3 +29,6 @@ If you want to contribute, I'm happy to include your suggestions. A good startin
     ...
     ```
     The tool now sets `LC_ALL=C` before calling `client.info()`, which covers most locale-related failures; if it still reproduces on your system, `sudo dpkg-reconfigure locales` and selecting an appropriate language (i.e. `C.UTF-8`) is the underlying fix.
+
+## AI in development
+Large language models (LLMs) were used in the development process of this tool — for design, implementation, review and documentation. Commits created with AI assistance are recorded with an `Assisted-by: LLM` trailer. The design decisions and the review of the result are the maintainer's.
